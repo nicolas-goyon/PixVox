@@ -118,6 +118,7 @@ ratée), `2` erreur d'utilisation ou d'environnement, `3` erreur interne.
 | `examples/angel_statue.py` | statue 3 × 3,5 × 1 blocs en 16 et 32 voxels par bloc + figurine |
 | `examples/brazier.py` | brasero animé : braises lumineuses, feu sur 4 plans, variante des âmes |
 | `examples/magma_core.py` | bloc plein animé : lave qui coule dans les joints |
+| `examples/copper_lantern.py` | modèle libre lumineux : cage en cuivre patiné, cœur `emission` 15 |
 
 ![Galerie](docs/images/galerie.png)
 
