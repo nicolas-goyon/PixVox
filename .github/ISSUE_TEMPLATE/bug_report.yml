@@ -1,0 +1,24 @@
+name: Problème
+description: Un résultat faux, une erreur, un export refusé à tort…
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: Ce qui se passe
+      description: commande lancée, résultat obtenu, résultat attendu
+    validations:
+      required: true
+  - type: textarea
+    id: json
+    attributes:
+      label: Sortie JSON
+      description: la même commande avec --json (et le fichier d'asset si possible)
+      render: json
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Environnement (pixvox doctor --json)
+      render: json
+    validations:
+      required: true

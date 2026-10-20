@@ -31,6 +31,9 @@ dependencies = ["numpy>=1.24", "pillow>=10.0"]
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6", "pyyaml>=6"]
 
+[project.scripts]
+pixvox = "pixvox.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/nicolas-goyon/PixVox"
 Documentation = "https://github.com/nicolas-goyon/PixVox#readme"
