@@ -4,7 +4,7 @@
 # Les sorties sont écrites dans le dossier monté (/work). Minecraft n'est jamais lancé.
 FROM eclipse-temurin:25-jdk AS jdk
 
-FROM python:3.13-slim
+FROM python:3.15-slim
 COPY --from=jdk /opt/java/openjdk /opt/java/openjdk
 ENV JAVA_HOME=/opt/java/openjdk \
     PATH="/opt/java/openjdk/bin:${PATH}" \
