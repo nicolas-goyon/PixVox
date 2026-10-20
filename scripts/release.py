@@ -10,7 +10,8 @@ check décide, d'après l'événement GitHub :
     coché, depuis la branche par défaut et si le tag v<version> n'existe pas encore ; sans « publish »,
     construction de contrôle : rien n'est publié.
 Version de test au sens PEP 440 (0.2.0rc1…) ou release cochée « pre-release » : prerelease=true.
-Sorties : version, tag, prerelease, publish dans $GITHUB_OUTPUT ; résumé dans $GITHUB_STEP_SUMMARY.
+pypi=false quand la case est cochée sur un numéro stable : PyPI le prendrait pour une version finale.
+Sorties : version, tag, prerelease, publish, pypi dans $GITHUB_OUTPUT ; résumé dans $GITHUB_STEP_SUMMARY.
 Code 0 : la suite peut continuer ; 1 : refus, message ::error:: qui dit quoi corriger ; 2 : usage.
 """
 from __future__ import annotations
@@ -59,8 +60,9 @@ def decide(event: str, payload: dict, ref: str, version: str, tag_exists) -> dic
             raise ReleaseError(
                 f"la release {got} ne correspond pas à pixvox/__init__.py ({version}) : supprimer cette release "
                 f"et son tag, mettre __version__ et CHANGELOG.md à jour sur la branche par défaut, puis republier")
-        return {"version": version, "tag": tag, "prerelease": pre or bool(release.get("prerelease")),
-                "publish": True}
+        ticked = bool(release.get("prerelease"))           # case « pre-release » cochée sur le site
+        return {"version": version, "tag": tag, "prerelease": pre or ticked, "publish": True,
+                "pypi": pre or not ticked}
     inputs = payload.get("inputs") or {}
     publish = event == "workflow_dispatch" and str(inputs.get("publish", "")).lower() == "true"
     if publish:
@@ -69,8 +71,9 @@ def decide(event: str, payload: dict, ref: str, version: str, tag_exists) -> dic
             raise ReleaseError(f"publication depuis la branche {default} uniquement "
                                f"(choisie : {ref.removeprefix('refs/heads/') or '?'})")
         if tag_exists(tag):
-            raise ReleaseError(f"{tag} existe déjà : augmenter __version__ (et CHANGELOG.md) sur {default}")
-    return {"version": version, "tag": tag, "prerelease": pre, "publish": publish}
+            raise ReleaseError(f"{tag} existe déjà : augmenter __version__ (et CHANGELOG.md) sur {default} ; "
+                               "ou, si ce tag a été poussé à la main, publier sa release depuis la page Releases")
+    return {"version": version, "tag": tag, "prerelease": pre, "publish": publish, "pypi": publish}
 
 
 def section(version: str, changelog: str) -> str | None:
@@ -119,6 +122,10 @@ def check() -> int:
         print(f"::error title=Publication refusée::{e}")
         _append("GITHUB_STEP_SUMMARY", f"### Publication refusée\n\n{e}\n")
         return 1
+    if res["publish"] and not res["pypi"]:
+        print(f"::warning title=Pré-version::{res['version']} est un numéro stable coché « pre-release » : traité "
+              "en version de test (ni :latest, ni :X.Y, ni tag majeur, ni PyPI) et décocher plus tard ne "
+              "republie rien ; pour une version de test, préférer un numéro X.Y.ZrcN")
     if section(res["version"], _changelog()) is None:
         print(f"::warning title=CHANGELOG.md::pas de section [{res['version']}] : "
               "les notes de la release se limiteront à la liste des PR")
