@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# sorties de pixvox (planches, packs, projets de mods)
+out/
+*.tmp_pixvox/
+
+# éditeurs / systèmes
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
