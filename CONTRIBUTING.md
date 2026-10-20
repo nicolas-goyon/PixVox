@@ -55,22 +55,26 @@ Tout peut se faire depuis le site GitHub, sans rien installer.
 
    | depuis | comment | ce qui se passe |
    |---|---|---|
-   | site, onglet *Actions* (recommandé) | *Release* → *Run workflow* → cocher `publish` → *Run workflow* | tout est construit et vérifié, puis la release `vX.Y.Z` apparaît complète (environ 15 min) ; en cas d'échec, rien n'est publié |
-   | site, page *Releases* | *Draft a new release* → *Choose a tag* : taper `vX.Y.Z`, *Create new tag on publish*, cible `main` → *Publish release* | la release apparaît tout de suite, ses fichiers environ 15 min plus tard ; description laissée vide : remplie avec la section du CHANGELOG et la liste des PR ; un texte écrit est gardé tel quel |
-   | terminal (agent, script) | `gh workflow run release.yml -f publish=true`, suivi avec `gh run watch` ; ou `gh release create vX.Y.Z --target main --notes ""` | comme la ligne correspondante ci-dessus |
+   | site, onglet *Actions* (recommandé) | *Release* → *Run workflow* → cocher « Publier la version » → *Run workflow* | tout est construit et vérifié, puis la release `vX.Y.Z` apparaît complète (environ 15 min) ; si une construction échoue, rien n'est publié |
+   | site, page *Releases* | *Draft a new release* → *Choose a tag* : taper `vX.Y.Z` puis *Create new tag*, cible `main` → *Publish release* | la release apparaît tout de suite, ses fichiers environ 15 min plus tard ; description laissée vide : remplie avec la section du CHANGELOG et la liste des PR ; un texte écrit est gardé tel quel |
+   | terminal (agent, script) | `gh workflow run release.yml -f publish=true`, puis `gh run list -w release.yml -L 1` et `gh run watch <id> --exit-status` ; ou `gh release create vX.Y.Z --target main --notes ""` | comme la ligne correspondante ci-dessus |
 
    Le tag doit valoir `v` + `__version__` : sinon le workflow s'arrête au premier job, sans rien
    construire (page *Releases* : supprimer la release et son tag, corriger, recommencer). Un tag poussé
-   seul (`git push origin vX.Y.Z`) ne publie rien. *Run workflow* sans cocher `publish` construit et
-   vérifie tout sans rien publier : une répétition générale.
+   seul (`git push origin vX.Y.Z`) ne publie rien. *Run workflow* sans cocher la case construit et
+   vérifie tout sans rien publier, une répétition générale (l'image Docker, elle, est construite et
+   testée par la CI à chaque PR). Une étape échoue (mod, Docker, PyPI…) : *Re-run failed jobs* sur la
+   page de l'exécution ; la release déjà créée est complétée, pas dupliquée.
 3. **Ce que publie le workflow « Release »** : la release GitHub et ses fichiers (wheel, sdist,
    `pixvox_skill.zip`, pack de démo, mods de démo), le tag `vX` pour l'action (si le jeton GitHub en a
    le droit), l'image `ghcr.io/nicolas-goyon/pixvox`. Une version de test au sens PEP 440 (`0.2.0rc1`)
-   ou une release cochée *Set as a pre-release* est marquée *pre-release* et ne touche ni `:latest`,
-   ni `:X.Y`, ni `vX`.
+   ou une release dont la case *pre-release* est cochée est marquée *pre-release* et ne touche ni
+   `:latest`, ni `:X.Y`, ni `vX`. Case cochée sur un numéro stable : pas de PyPI non plus, et la
+   décocher plus tard ne republie rien ; pour une version de test, préférer un numéro `X.Y.ZrcN`.
 4. **Une seule fois**, après la première version : rendre public le paquet `ghcr.io/nicolas-goyon/pixvox`
    (privé à sa création : *Packages* → `pixvox` → *Package settings* → *Change visibility*). PyPI
-   (facultatif, réserver le nom tôt) : créer un *trusted publisher* (dépôt `nicolas-goyon/PixVox`,
-   workflow `release.yml`, environnement `pypi`) puis la variable de dépôt `PYPI_PUBLISH=true`. Si les
-   releases immuables sont activées dans les réglages du dépôt, publier par *Run workflow* : une release
-   déjà publiée ne peut plus recevoir de fichiers.
+   (facultatif ; le nom n'est réservé qu'à la première publication) : créer un *trusted publisher*
+   (dépôt `nicolas-goyon/PixVox`, workflow `release.yml`, environnement `pypi` ; si cet environnement
+   limite les branches, autoriser `main` et les tags `v*`) puis la variable de dépôt `PYPI_PUBLISH=true`.
+   Si les releases immuables sont activées dans les réglages du dépôt, publier par *Run workflow* : une
+   release déjà publiée ne peut plus recevoir de fichiers.

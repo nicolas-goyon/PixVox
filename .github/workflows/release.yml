@@ -1,10 +1,10 @@
 # Publication d'une version. Préalable : __version__ (pixvox/__init__.py) et section ## [X.Y.Z] de
 # CHANGELOG.md à jour sur main. Ensuite, au choix (détails dans CONTRIBUTING.md) :
-#   - site, onglet Actions : Release → Run workflow → cocher « publish » (recommandé) : tout est construit
-#     et vérifié AVANT que la release n'apparaisse ; le tag vX.Y.Z est créé sur le commit construit ;
-#   - site, page Releases : Draft a new release → tag vX.Y.Z (« Create new tag on publish », cible main)
-#     → Publish release : le workflow joint ensuite les fichiers ; une description laissée vide est
-#     remplie avec la section du CHANGELOG et la liste des PR, un texte écrit à la main est gardé ;
+#   - site, onglet Actions : Release → Run workflow → cocher « Publier la version » (recommandé) : tout
+#     est construit et vérifié AVANT que la release n'apparaisse ; le tag vX.Y.Z est créé sur ce commit ;
+#   - site, page Releases : Draft a new release → tag vX.Y.Z (Create new tag, cible main) → Publish
+#     release : le workflow joint ensuite les fichiers ; une description laissée vide est remplie avec
+#     la section du CHANGELOG et la liste des PR, un texte écrit à la main est gardé ;
 #   - terminal : gh workflow run release.yml -f publish=true (ou gh release create vX.Y.Z --notes "").
 # Le tag doit valoir v + __version__ : sinon arrêt au premier job, rien n'est construit ni publié.
 # Fichiers de la release : wheel + sdist, pixvox_skill.zip (skill Claude), pack de démo + datapack,
@@ -12,9 +12,10 @@
 # (`uses: nicolas-goyon/PixVox@v0`) ; image ghcr.io/nicolas-goyon/pixvox:<version> (+ :X.Y et :latest
 # pour une version stable) ; PyPI seulement si la variable de dépôt PYPI_PUBLISH vaut "true"
 # (publication de confiance à configurer une fois sur pypi.org, environnement « pypi »).
-# Version de test (0.2.0rc1, 0.2.0b1… au sens PEP 440) ou case « Set as a pre-release » cochée :
-# release marquée pre-release, ni :X.Y, ni :latest, ni tag majeur.
-# Run workflow sans cocher « publish » : construit et vérifie tout, ne publie rien.
+# Version de test (0.2.0rc1, 0.2.0b1… au sens PEP 440) ou case pre-release cochée : release marquée
+# pre-release, ni :X.Y, ni :latest, ni tag majeur ; case cochée sur un numéro stable : pas de PyPI.
+# Run workflow sans cocher la case : construit et vérifie tout (sauf l'image Docker, construite et
+# testée par la CI à chaque PR), ne publie rien. Après un échec : « Re-run failed jobs ».
 name: Release
 
 on:
@@ -23,7 +24,7 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: "Publier la version de pixvox/__init__.py (décoché : construire et vérifier seulement)"
+        description: "Publier la version (décoché : construire et vérifier, sans rien publier)"
         type: boolean
         default: false
 
@@ -46,6 +47,7 @@ jobs:
       tag: ${{ steps.check.outputs.tag }}
       prerelease: ${{ steps.check.outputs.prerelease }}
       publish: ${{ steps.check.outputs.publish }}
+      pypi: ${{ steps.check.outputs.pypi }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -54,6 +56,20 @@ jobs:
       - name: Le tag correspond-il à pixvox/__init__.py ?
         id: check
         run: python scripts/release.py check
+
+  flag-prerelease:
+    name: marquer la pré-version (sans attendre la construction)
+    needs: check
+    if: github.event_name == 'release' && needs.check.outputs.prerelease == 'true' && !github.event.release.prerelease
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - run: gh release edit "$TAG" --prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.check.outputs.tag }}
 
   dist:
     name: paquet Python, skill, pack de démo
@@ -137,6 +153,10 @@ jobs:
       - name: Créer la release, fichiers compris (lancement manuel)
         if: github.event_name == 'workflow_dispatch'
         run: |
+          if gh release view "$TAG" > /dev/null 2>&1; then     # relance après une création réussie
+            gh release upload "$TAG" dist/* --clobber
+            exit 0
+          fi
           flags=(--target "$GITHUB_SHA" --title "$TAG" --notes-file notes.md --generate-notes)
           if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
           gh release create "$TAG" dist/* "${flags[@]}"
@@ -204,7 +224,7 @@ jobs:
   pypi:
     name: PyPI (optionnel)
     needs: [check, github-release]
-    if: needs.check.outputs.publish == 'true' && vars.PYPI_PUBLISH == 'true'
+    if: needs.check.outputs.pypi == 'true' && vars.PYPI_PUBLISH == 'true'
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -217,3 +237,5 @@ jobs:
       - name: Garder seulement le paquet Python
         run: find dist -type f ! -name "*.whl" ! -name "*.tar.gz" -delete
       - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true                  # « Re-run all jobs » après une release du site

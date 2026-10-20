@@ -47,21 +47,25 @@ def test_release_check_decides_from_the_event():
     # release publiée sur le site (ou gh release create) : le tag doit être v + __version__
     site = {"release": {"tag_name": "v0.2.0", "prerelease": False}}
     assert rel.decide("release", site, "refs/tags/v0.2.0", "0.2.0", free) == \
-        {"version": "0.2.0", "tag": "v0.2.0", "prerelease": False, "publish": True}
+        {"version": "0.2.0", "tag": "v0.2.0", "prerelease": False, "publish": True, "pypi": True}
     assert "0.1.0" in _refused(rel, "release", site, "refs/tags/v0.2.0", "0.1.0", free)
-    # pré-version : case « pre-release » cochée, ou numéro de test PEP 440
-    ticked = {"release": {"tag_name": "v0.2.0", "prerelease": True}}
-    assert rel.decide("release", ticked, "", "0.2.0", free)["prerelease"] is True
-    assert rel.decide("release", {"release": {"tag_name": "v0.2.0rc1"}}, "", "0.2.0rc1", free)["prerelease"] is True
+    # pré-version : numéro de test PEP 440 (PyPI sait ne pas le proposer par défaut)…
+    rc = rel.decide("release", {"release": {"tag_name": "v0.2.0rc1"}}, "", "0.2.0rc1", free)
+    assert rc["prerelease"] is True and rc["pypi"] is True
+    # … ou case « pre-release » cochée sur un numéro stable : pas de PyPI, qui le croirait final
+    ticked = rel.decide("release", {"release": {"tag_name": "v0.2.0", "prerelease": True}}, "", "0.2.0", free)
+    assert ticked["prerelease"] is True and ticked["pypi"] is False
 
     # lancement manuel : rien n'est publié sans « publish »
     repo = {"repository": {"default_branch": "main"}}
     dry = rel.decide("workflow_dispatch", {"inputs": {"publish": "false"}, **repo}, "refs/heads/dev", "0.2.0", free)
-    assert dry["publish"] is False and dry["tag"] == "v0.2.0"
+    assert dry["publish"] is False and dry["pypi"] is False and dry["tag"] == "v0.2.0"
     run = {"inputs": {"publish": "true"}, **repo}                # les entrées arrivent en texte dans l'événement
-    assert rel.decide("workflow_dispatch", run, "refs/heads/main", "0.2.0", free)["publish"] is True
+    assert rel.decide("workflow_dispatch", run, "refs/heads/main", "0.2.0", free)["pypi"] is True
     assert "main" in _refused(rel, "workflow_dispatch", run, "refs/heads/dev", "0.2.0", free)
     assert "existe déjà" in _refused(rel, "workflow_dispatch", run, "refs/heads/main", "0.2.0", lambda tag: True)
+    assert rel.decide("workflow_dispatch", {"inputs": {"publish": True}, **repo}, "refs/heads/main", "0.2.0",
+                      free)["publish"] is True                    # booléen JSON accepté aussi
     # tout autre événement (CI) : jamais de publication
     assert rel.decide("push", {}, "refs/heads/main", "0.2.0", free)["publish"] is False
     # numéro illisible par pip : refus, quel que soit l'événement
