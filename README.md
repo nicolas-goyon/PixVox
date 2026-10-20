@@ -8,6 +8,7 @@ Conçu pour être utilisé par un agent (Claude, Codex…), un humain ou un autr
 [![CI](https://github.com/nicolas-goyon/PixVox/actions/workflows/ci.yml/badge.svg)](https://github.com/nicolas-goyon/PixVox/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.10%20→%203.14-blue)
 ![Minecraft](https://img.shields.io/badge/Minecraft-1.21.4%20→%2026.3-62a03e)
+[![Licence MIT](https://img.shields.io/badge/licence-MIT-informational)](LICENSE)
 
 > **In English:** pixvox is a code-driven pixel/voxel art workshop for Minecraft Java. Describe assets
 > in Python, render them like the game does, get an analysis, export a resource pack verified by
@@ -132,4 +133,10 @@ ratée), `2` erreur d'utilisation ou d'environnement, `3` erreur interne.
 ## Contribuer
 
 Voir [`CONTRIBUTING.md`](CONTRIBUTING.md) : installation de développement, tests, pile de PR, CI et
-publication des versions. Les assets proposés en PR sont rendus et vérifiés automatiquement.
+publication des versions (possible entièrement depuis le site GitHub). Les assets proposés en PR sont
+rendus et vérifiés automatiquement.
+
+## Licence
+
+[MIT](LICENSE) © 2026 Nicolas Goyon. Pas un produit officiel Minecraft : ni approuvé par Mojang ou
+Microsoft, ni associé à eux.

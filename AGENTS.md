@@ -89,5 +89,8 @@ la PR suivante : `git rebase --onto origin/main <ancienne-base> <branche>`.
 
 ## Publier une version
 
-1. Mettre à jour `pixvox/__init__.py` (`__version__`) et `CHANGELOG.md`.
-2. Pousser un tag `vX.Y.Z` : le workflow « Release » construit et publie tout (voir `CONTRIBUTING.md`).
+1. Mettre à jour `pixvox/__init__.py` (`__version__`) et `CHANGELOG.md` (section `## [X.Y.Z]`), sur `main`.
+2. `gh workflow run release.yml -f publish=true` (sur le site : Actions → Release → Run workflow →
+   cocher `publish`). Le workflow « Release » vérifie le numéro, construit et teste tout, puis crée la
+   release `vX.Y.Z` avec ses fichiers. Un tag poussé seul ne publie rien. Autres façons, dont la page
+   Releases du site : `CONTRIBUTING.md`.

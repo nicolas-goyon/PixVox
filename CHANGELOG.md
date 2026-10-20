@@ -22,3 +22,6 @@ Première version publique.
 - Ligne de commande `pixvox` : `--json` (contrat `pixvox.result/1`), codes de sortie 0/1/2/3, `new`,
   `doctor`, `summary`.
 - Action GitHub réutilisable, aperçu automatique des assets dans les PR, image Docker, skill Claude.
+- Publication des versions depuis le site GitHub (Actions → Release → Run workflow, ou page Releases) ou
+  `gh` : le numéro est contrôlé avant toute publication, les fichiers sont joints automatiquement.
+- Licence MIT, déclarée dans les métadonnées du paquet (PEP 639) et du plugin Claude Code.

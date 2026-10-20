@@ -6,5 +6,6 @@
   },
   "homepage": "https://github.com/nicolas-goyon/PixVox",
   "repository": "https://github.com/nicolas-goyon/PixVox",
+  "license": "MIT",
   "keywords": ["minecraft", "pixel-art", "voxel", "resource-pack", "mod", "fabric", "neoforge"]
 }

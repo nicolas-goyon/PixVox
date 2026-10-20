@@ -7,8 +7,9 @@ Produit :
   - pixvox_skill.zip            skill pour Claude : SKILL.md + paquet + exemples + tests, autonome
   - pixvox_demo_pack.zip        tous les exemples exportés et vérifiés (resource pack Java)
   - pixvox_demo_pack_datapack.zip   placement des objets multiblocs sans mod
---check décompresse le skill dans un dossier temporaire et y lance `python -m pixvox doctor` SANS
-installation (c'est ainsi que Claude l'utilise), puis toute la suite de tests (`tests/run.py`).
+--check contrôle la licence de la wheel, puis décompresse le skill dans un dossier temporaire et y lance
+`python -m pixvox doctor` SANS installation (c'est ainsi que Claude l'utilise) et toute la suite de
+tests (`tests/run.py`).
 Les .jar des mods de démo sont produits par le job « mods » (JDK 25 requis).
 """
 from __future__ import annotations
@@ -68,6 +69,17 @@ def build_pack(out: Path) -> None:
     print(f"pack de démo : {len(res['assets'])} assets vérifiés -> {out / 'pixvox_demo_pack.zip'}")
 
 
+def check_wheel(out: Path) -> None:
+    """La wheel déclare sa licence (PEP 639 : License-Expression) et embarque le fichier LICENSE."""
+    wheel = next(out.glob("pixvox-*.whl"))
+    with zipfile.ZipFile(wheel) as zf:
+        names = zf.namelist()
+        meta = zf.read(next(n for n in names if n.endswith(".dist-info/METADATA"))).decode("utf-8")
+    assert "License-Expression: MIT" in meta.splitlines(), "licence absente des métadonnées de la wheel"
+    assert any(n.endswith(".dist-info/licenses/LICENSE") for n in names), "LICENSE absent de la wheel"
+    print(f"wheel : licence MIT déclarée, LICENSE inclus ({wheel.name})")
+
+
 def check_skill(z: Path) -> None:
     with tempfile.TemporaryDirectory(prefix="pixvox_skill_", ignore_cleanup_errors=True) as tmp:
         zipfile.ZipFile(z).extractall(tmp)
@@ -96,6 +108,8 @@ def main(argv=None) -> int:
     if not a.no_pack:
         build_pack(out)
     if a.check:
+        if not a.no_python:
+            check_wheel(out)
         check_skill(z)
     for p in sorted(out.iterdir()):
         print(f"  {p.name:45s} {p.stat().st_size // 1024:6d} Ko")
