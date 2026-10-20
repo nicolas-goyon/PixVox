@@ -1,0 +1,180 @@
+# Publication d'une version : pousser un tag vX.Y.Z (même version que pixvox/__init__.py).
+#   - release GitHub avec : wheel + sdist, pixvox_skill.zip (skill Claude), pack de démo + datapack,
+#     mods de démo compilés (Fabric et NeoForge) ;
+#   - le tag majeur vX est déplacé si GitHub l'autorise (`uses: nicolas-goyon/PixVox@v0`) ;
+#   - image Docker ghcr.io/nicolas-goyon/pixvox:<version> (+ :latest pour une version stable) ;
+#   - PyPI seulement si la variable de dépôt PYPI_PUBLISH vaut "true" (publication de confiance à
+#     configurer une fois sur pypi.org, environnement « pypi »).
+# Version de test (0.2.0rc1, 0.2.0b1… au sens PEP 440) : release marquée « pre-release », ni :latest
+# ni tag majeur. Lancement manuel (workflow_dispatch) : construit tout sans rien publier.
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  dist:
+    name: paquet Python, skill, pack de démo
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - run: python -m pip install build -e .
+      - name: Version (PEP 440) et contrôle du tag
+        id: version
+        run: |
+          pkg=$(python -c "import pixvox; print(pixvox.__version__)")
+          pre=$(python -c "import pixvox; from packaging.version import Version; print(str(Version(pixvox.__version__).is_prerelease).lower())")
+          echo "version=$pkg" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$pre" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            test "${GITHUB_REF_NAME#v}" = "$pkg" || { echo "::error::tag $GITHUB_REF_NAME ≠ version $pkg"; exit 1; }
+          fi
+      - run: python scripts/build_dist.py --out dist --check
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
+  mods:
+    name: mod de démo ${{ matrix.loader }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      matrix:
+        loader: [fabric, neoforge]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "25"
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          add-job-summary: on-failure
+      - run: python -m pip install -e .
+      - name: Compiler le mod de démo (+ test JUnit)
+        run: >
+          pixvox mod examples/*.py --modid pixvox_demo --name "Pixvox Demo" --loader ${{ matrix.loader }}
+          --out out/mod --zip out/pixvox_demo_${{ matrix.loader }}_sources.zip --build --json > mod.json
+      - name: Nommer le jar
+        run: |
+          ver=$(python -c "import pixvox; print(pixvox.__version__)")
+          mkdir -p dist
+          cp out/mod/build/libs/pixvox_demo-1.0.0.jar "dist/pixvox_demo-${{ matrix.loader }}-26.3-pixvox$ver.jar"
+          cp out/pixvox_demo_${{ matrix.loader }}_sources.zip dist/
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mod-${{ matrix.loader }}
+          path: dist/
+
+  github-release:
+    name: release GitHub
+    needs: [dist, mods]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: mod-*
+          path: dist
+          merge-multiple: true
+      - name: Notes de version (CHANGELOG.md)
+        run: python scripts/release_notes.py "$GITHUB_REF_NAME" > notes.md
+      - uses: softprops/action-gh-release@v3
+        with:
+          files: dist/*
+          body_path: notes.md
+          generate_release_notes: true
+          prerelease: ${{ needs.dist.outputs.prerelease == 'true' }}
+      - name: Déplacer le tag majeur (uses …@vX), si GitHub l'autorise
+        if: needs.dist.outputs.prerelease != 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          major="${GITHUB_REF_NAME%%.*}"
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$major" > /dev/null 2>&1; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/$major" -f sha="$GITHUB_SHA" -F force=true
+          else
+            gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$major" -f sha="$GITHUB_SHA"
+          fi || { echo "::warning::tag $major non déplacé (droits du jeton) : utiliser @$GITHUB_REF_NAME"; exit 1; }
+
+  docker:
+    name: image Docker (ghcr.io)
+    needs: [dist, github-release]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      DOCKER_BUILD_RECORD_UPLOAD: "false"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/pixvox
+          tags: |
+            type=pep440,pattern={{version}}
+            type=pep440,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ needs.dist.outputs.prerelease != 'true' }}
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  pypi:
+    name: PyPI (optionnel)
+    needs: [dist, github-release]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && vars.PYPI_PUBLISH == 'true'
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist
+      - name: Garder seulement le paquet Python
+        run: find dist -type f ! -name "*.whl" ! -name "*.tar.gz" -delete
+      - uses: pypa/gh-action-pypi-publish@release/v1
