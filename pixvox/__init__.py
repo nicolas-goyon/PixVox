@@ -1,4 +1,11 @@
-"""pixvox — atelier pixel-art / voxel-art pour Minecraft, piloté par code (humains, agents, logiciels)."""
+"""pixvox — atelier pixel-art / voxel-art pour Minecraft, piloté par code (humains, agents, logiciels).
+
+Boucle de travail :
+    1. décrire l'asset en Python (Volume / Sprite) ;
+    2. review(asset) -> planche PNG + rapport texte ;
+    3. regarder, lire, corriger ;
+    4. export_pack([...]) -> resource pack Java vérifié par re-rendu.
+"""
 from .anim import EMBER, FIRE, SOUL_EMBER, SOUL_FIRE, Anim, Timing, fire, flow, pulse
 from .assets import Block, Item, Model, MultiBlock, Plane, Props
 from .color import (
@@ -24,6 +31,38 @@ from .volume import FACE_AXES, FACES, NORMALS, Volume, face_coords
 __version__ = "0.1.0"
 
 
+def review(asset, out_dir="out", show_report=True):
+    """Planche de revue PNG + rapport texte (+ planche d'animation et GIF). Retourne (png, rapport)."""
+    from .review import review as _review
+    return _review(asset, out_dir, show_report)
+
+
+def view(asset, yaw, pitch, size=600, shading="gui", path=None, out_dir="out", persp=0.0, tick=0):
+    """Rendu à un angle libre (blocs, modèles, multiblocs, items extrudés).
+    shading : 'gui' | 'world' | 'night' | 'flat' ; persp > 0 : perspective (1.5–3, conseillé par dessous) ;
+    tick : instant d'une animation (20 ticks = 1 s)."""
+    from .review import view as _view
+    return _view(asset, yaw, pitch, size, shading, path, out_dir, persp, tick)
+
+
+def animate(asset, out_dir="out"):
+    """Planche des images d'une animation + GIF à la vitesse du jeu. Retourne (png, gif)."""
+    from .review import anim_sheet
+    return anim_sheet(asset, out_dir)
+
+
+def compare(assets, path="out/compare.png", size=300):
+    """Planche de variantes côte à côte."""
+    from .review import compare_sheet
+    return compare_sheet(assets, path, size)
+
+
+def analyze(asset):
+    """Liste de constats (Finding : level OK | INFO | WARN | ERR, topic, msg)."""
+    from .analyze import analyze as _analyze
+    return _analyze(asset)
+
+
 def export_pack(assets, root="out/pack", namespace="pixvox", zip_path=None, replace=None,
                 description="Créé avec pixvox"):
     """Écrit un resource pack Java et vérifie chaque asset par re-rendu.
@@ -45,4 +84,4 @@ __all__ = ["Block", "Item", "Model", "MultiBlock", "Plane", "Props", "Anim", "Ti
            "flow", "FIRE", "SOUL_FIRE", "EMBER", "SOUL_EMBER", "Volume", "Sprite", "Ramp", "ramp",
            "ramp_between", "rgba", "hexa", "mix", "adjust", "lighten", "darken", "shade", "lightness",
            "luminance", "delta_e", "nearest", "perlin", "worley", "equalize", "FACES", "NORMALS",
-           "FACE_AXES", "face_coords", "export_pack"]
+           "FACE_AXES", "face_coords", "review", "view", "animate", "compare", "analyze", "export_pack"]
