@@ -4,7 +4,8 @@ Boucle de travail :
     1. décrire l'asset en Python (Volume / Sprite) ;
     2. review(asset) -> planche PNG + rapport texte ;
     3. regarder, lire, corriger ;
-    4. export_pack([...]) -> resource pack Java vérifié par re-rendu.
+    4. export_pack([...]) -> resource pack Java vérifié par re-rendu ;
+       export_mod([...]) -> mod Fabric / NeoForge.
 """
 from .anim import EMBER, FIRE, SOUL_EMBER, SOUL_FIRE, Anim, Timing, fire, flow, pulse
 from .assets import Block, Item, Model, MultiBlock, Plane, Props
@@ -80,8 +81,16 @@ def export_pack(assets, root="out/pack", namespace="pixvox", zip_path=None, repl
     return res["infos"]
 
 
+def export_mod(assets, out="out/mod", modid="pixvox_mod", name=None, **kw):
+    """Projet de mod Minecraft 26.3 (loader="fabric" ou "neoforge") : vrais blocs (formes, lumière,
+    particules, multiblocs posables). build=True compile le .jar (JDK 25). Voir pixvox.mod.export_mod."""
+    from .mod import export_mod as _export_mod
+    return _export_mod(assets, out, modid, name, **kw)
+
+
 __all__ = ["Block", "Item", "Model", "MultiBlock", "Plane", "Props", "Anim", "Timing", "fire", "pulse",
            "flow", "FIRE", "SOUL_FIRE", "EMBER", "SOUL_EMBER", "Volume", "Sprite", "Ramp", "ramp",
            "ramp_between", "rgba", "hexa", "mix", "adjust", "lighten", "darken", "shade", "lightness",
            "luminance", "delta_e", "nearest", "perlin", "worley", "equalize", "FACES", "NORMALS",
-           "FACE_AXES", "face_coords", "review", "view", "animate", "compare", "analyze", "export_pack"]
+           "FACE_AXES", "face_coords", "review", "view", "animate", "compare", "analyze", "export_pack",
+           "export_mod"]
