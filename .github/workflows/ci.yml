@@ -156,3 +156,25 @@ jobs:
         run: |
           test "$OK" = "true"
           python -c "import json, os; d = json.load(open(os.environ['RESULT'], encoding='utf-8')); assert d['ok'] and len(d['assets']) == 2, d"
+
+  docker:
+    name: image Docker (construction + essai)
+    runs-on: ubuntu-latest
+    env:
+      DOCKER_BUILD_RECORD_UPLOAD: "false"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: pixvox:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Essai de l'image (doctor + export)
+        run: |
+          docker run --rm pixvox:ci doctor --json > doctor.json
+          python3 -c "import json; d = json.load(open('doctor.json')); assert d['ok'] and d['java']['ok'], d"
+          docker run --rm -v "$PWD:/work" pixvox:ci export examples/lumenite_ore.py --pack out/docker-pack --json > docker-export.json
+          python3 -c "import json; d = json.load(open('docker-export.json')); assert d['ok'], d"
