@@ -1,0 +1,49 @@
+name: Demande d'asset
+description: Décrire un bloc, un modèle, un objet de plusieurs blocs ou un item à créer avec pixvox.
+title: "[asset] "
+labels: ["asset"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Une demande précise peut être réalisée telle quelle par un agent (ou un humain) : `pixvox new`, `pixvox review`, PR vérifiée par la CI.
+  - type: input
+    id: name
+    attributes:
+      label: Nom de l'asset
+      description: minuscules, chiffres et _ (identifiant Minecraft)
+      placeholder: lanterne_de_cuivre
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Type
+      options:
+        - bloc plein (block)
+        - modèle à forme libre (model)
+        - objet de plusieurs blocs (multiblock)
+        - item / icône (item)
+        - bloc animé (animated)
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: forme, matières, couleurs, ambiance, taille (en blocs), animation, lumière…
+    validations:
+      required: true
+  - type: textarea
+    id: references
+    attributes:
+      label: Références
+      description: images, blocs vanilla proches, palettes (#rrggbb)
+  - type: checkboxes
+    id: outputs
+    attributes:
+      label: Sorties souhaitées
+      options:
+        - label: resource pack (sans mod)
+        - label: mod Fabric
+        - label: mod NeoForge

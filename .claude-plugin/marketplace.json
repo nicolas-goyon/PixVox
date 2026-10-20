@@ -1,0 +1,14 @@
+{
+  "name": "pixvox",
+  "owner": {
+    "name": "Nicolas Goyon"
+  },
+  "description": "pixvox : atelier pixel-art / voxel-art Minecraft piloté par code, pour Claude Code.",
+  "plugins": [
+    {
+      "name": "pixvox",
+      "source": "./claude-plugin",
+      "description": "Skill pixvox : créer, rendre, vérifier et exporter des assets Minecraft (resource pack vérifié ou mod Fabric / NeoForge) depuis n'importe quel projet."
+    }
+  ]
+}
