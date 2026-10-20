@@ -159,6 +159,25 @@ jobs:
           test "$OK" = "true"
           python -c "import json, os; d = json.load(open(os.environ['RESULT'], encoding='utf-8')); assert d['ok'] and len(d['assets']) == 2, d"
 
+  dist:
+    name: livrables (wheel, skill, pack de démo)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: python -m pip install build -e .
+      - name: Construire dist/ et vérifier le skill autonome
+        run: python scripts/build_dist.py --out dist --check
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+          retention-days: 14
+
   docker:
     name: image Docker (construction + essai)
     runs-on: ubuntu-latest
