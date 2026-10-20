@@ -1,0 +1,10 @@
+{
+  "name": "pixvox",
+  "description": "Créer, rendre, vérifier et exporter des assets Minecraft Java avec pixvox (resource pack vérifié par re-rendu, mods Fabric / NeoForge).",
+  "author": {
+    "name": "Nicolas Goyon"
+  },
+  "homepage": "https://github.com/nicolas-goyon/PixVox",
+  "repository": "https://github.com/nicolas-goyon/PixVox",
+  "keywords": ["minecraft", "pixel-art", "voxel", "resource-pack", "mod", "fabric", "neoforge"]
+}
