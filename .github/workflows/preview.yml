@@ -1,0 +1,76 @@
+# Aperçu automatique des assets ajoutés ou modifiés par une PR (examples/ ou assets/) :
+# planches de revue + GIF, export vérifié, et un commentaire de PR mis à jour à chaque poussée.
+# Pratique pour relire le travail d'un agent sans rien installer. PR venant d'un fork : pas de
+# commentaire (jeton en lecture seule), le résumé et les artefacts de l'exécution restent disponibles.
+name: Aperçu des assets
+
+on:
+  pull_request:
+    paths:
+      - "examples/**.py"
+      - "assets/**.py"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    name: planches + export des assets modifiés
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Assets modifiés
+        id: changed
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          files=$(git -c core.quotePath=false diff -z --name-only --diff-filter=AMR "$BASE"...HEAD -- \
+                  'examples/*.py' 'examples/**/*.py' 'assets/*.py' 'assets/**/*.py' | tr '\0' '\n' | sort -u | tr '\n' ' ')
+          echo "files=$files" >> "$GITHUB_OUTPUT"
+          echo "Assets modifiés : ${files:-aucun}"
+      - name: Planches de revue
+        id: review
+        if: steps.changed.outputs.files != ''
+        uses: ./
+        with:
+          command: review
+          files: ${{ steps.changed.outputs.files }}
+          args: --out out/review
+          artifact-name: apercu-planches
+          fail: "false"
+      - name: Export vérifié
+        id: export
+        if: steps.changed.outputs.files != ''
+        uses: ./
+        with:
+          command: export
+          files: ${{ steps.changed.outputs.files }}
+          args: --pack out/pack --zip out/apercu_pack.zip
+          upload-path: out/apercu_pack*.zip
+          artifact-name: apercu-pack
+          fail: "false"
+      - name: Commentaire sur la PR
+        if: steps.changed.outputs.files != '' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REVIEW_MD: ${{ steps.review.outputs.summary }}
+          EXPORT_MD: ${{ steps.export.outputs.summary }}
+          REVIEW_URL: ${{ steps.review.outputs.artifact-url }}
+          PACK_URL: ${{ steps.export.outputs.artifact-url }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: python scripts/pr_comment.py
+      - name: Échec si l'export ne se vérifie pas
+        if: steps.export.outputs.ok == 'false'
+        env:
+          CODE: ${{ steps.export.outputs.exit-code }}
+        run: |
+          echo "::error title=pixvox::export refusé ou non fidèle (code $CODE) — voir le résumé et le commentaire"
+          exit 1

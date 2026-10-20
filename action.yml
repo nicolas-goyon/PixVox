@@ -1,0 +1,138 @@
+# Action GitHub réutilisable : `uses: nicolas-goyon/PixVox@main` (ou @v0.1.0…) dans n'importe quel dépôt.
+# Elle installe pixvox, lance une commande en mode --json, écrit un résumé Markdown dans le job,
+# téléverse les sorties et expose le résultat (outputs) aux étapes suivantes. Voir docs/integration.md.
+name: pixvox
+description: Rend, analyse, vérifie et exporte des assets Minecraft écrits avec pixvox (resource pack ou mod Fabric / NeoForge).
+author: nicolas-goyon
+branding:
+  icon: box
+  color: green
+
+inputs:
+  command:
+    description: "Commande pixvox : export, review, mod, anim, compare, view, doctor…"
+    required: false
+    default: export
+  files:
+    description: "Fichiers d'assets .py ; motifs glob acceptés (assets/**/*.py), séparés par des espaces ou des retours à la ligne (noms sans espaces)."
+    required: false
+    default: ""
+  args:
+    description: "Arguments supplémentaires, découpés comme un shell (ex. --pack out/pack --zip out/pack.zip, --modid mon_mod --build)."
+    required: false
+    default: ""
+  working-directory:
+    description: "Dossier où lancer pixvox (relatif au dépôt)."
+    required: false
+    default: "."
+  python-version:
+    description: "Version de Python à installer ; vide = utiliser le Python d'une étape actions/setup-python précédente (le Python système d'Ubuntu refuse pip)."
+    required: false
+    default: "3.13"
+  java:
+    description: "true : installer un JDK 25 et le cache Gradle (nécessaire pour mod --build)."
+    required: false
+    default: "false"
+  pixvox-spec:
+    description: "Ce que pip installe ; vide = le code de cette action (ex. un chemin, ou « pixvox @ git+https://github.com/nicolas-goyon/PixVox@v0.1.0 »)."
+    required: false
+    default: ""
+  upload:
+    description: "true : téléverser les sorties comme artefact."
+    required: false
+    default: "true"
+  upload-path:
+    description: "Chemins à téléverser ; vide = out/ (sans les caches Gradle) + le résultat JSON."
+    required: false
+    default: ""
+  artifact-name:
+    description: "Nom de l'artefact ; vide = pixvox-<commande>-<job>-<suffixe aléatoire> (jamais en collision dans une matrice)."
+    required: false
+    default: ""
+  summary:
+    description: "true : écrire le résumé Markdown dans le résumé du job."
+    required: false
+    default: "true"
+  fail:
+    description: "true : faire échouer l'étape si pixvox renvoie un code différent de 0."
+    required: false
+    default: "true"
+
+outputs:
+  ok:
+    description: "true si la commande a réussi (code 0)."
+    value: ${{ steps.run.outputs.ok }}
+  exit-code:
+    description: "Code de sortie : 0 réussi, 1 vérification échouée, 2 utilisation ou environnement, 3 erreur interne."
+    value: ${{ steps.run.outputs.exit-code }}
+  result:
+    description: "Chemin du résultat JSON (contrat pixvox.result/1, docs/cli.md)."
+    value: ${{ steps.run.outputs.result }}
+  summary:
+    description: "Chemin du résumé Markdown."
+    value: ${{ steps.run.outputs.summary }}
+  artifact-url:
+    description: "Lien de téléchargement de l'artefact."
+    value: ${{ steps.upload.outputs.artifact-url }}
+  artifact-name:
+    description: "Nom de l'artefact téléversé."
+    value: ${{ steps.run.outputs.artifact-name }}
+
+runs:
+  using: composite
+  steps:
+    - name: Python
+      if: inputs.python-version != ''
+      uses: actions/setup-python@v7
+      with:
+        python-version: ${{ inputs.python-version }}
+    - name: JDK 25
+      if: inputs.java == 'true'
+      uses: actions/setup-java@v6
+      with:
+        distribution: temurin
+        java-version: "25"
+    - name: Cache Gradle
+      if: inputs.java == 'true'
+      uses: gradle/actions/setup-gradle@v6
+      with:
+        add-job-summary: on-failure
+    - name: Installer pixvox
+      shell: bash
+      env:
+        SPEC: ${{ inputs.pixvox-spec }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        python -m pip install --disable-pip-version-check --quiet "${SPEC:-$ACTION_PATH}"
+        pixvox --version
+    - name: pixvox ${{ inputs.command }}
+      id: run
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        PIXVOX_CMD: ${{ inputs.command }}
+        PIXVOX_FILES: ${{ inputs.files }}
+        PIXVOX_ARGS: ${{ inputs.args }}
+        PIXVOX_UPLOAD_PATH: ${{ inputs.upload-path }}
+        PIXVOX_ARTIFACT_NAME: ${{ inputs.artifact-name }}
+        PIXVOX_JOB_SUMMARY: ${{ inputs.summary }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: python "$ACTION_PATH/scripts/action_run.py"
+    - name: Téléverser les sorties
+      id: upload
+      if: inputs.upload == 'true'
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ steps.run.outputs.artifact-name }}
+        path: ${{ steps.run.outputs.upload-path }}
+        if-no-files-found: ignore
+        retention-days: 14
+    - name: Code de sortie
+      if: inputs.fail == 'true' && steps.run.outputs.exit-code != '0'
+      shell: bash
+      env:
+        CODE: ${{ steps.run.outputs.exit-code }}
+        CMD: ${{ inputs.command }}
+      run: |
+        echo "::error title=pixvox $CMD::échec (code $CODE) — voir le résumé du job et l'artefact"
+        exit "$CODE"

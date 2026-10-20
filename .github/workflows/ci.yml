@@ -136,3 +136,23 @@ jobs:
             mod.json
           if-no-files-found: warn
           retention-days: 14
+
+  action:
+    name: action réutilisable (uses ./)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./
+        id: pixvox
+        with:
+          command: export
+          files: examples/lumenite_ore.py examples/glowcap.py
+          args: --pack out/pack --zip out/pack.zip
+          artifact-name: action-selftest
+      - name: Sorties de l'action
+        env:
+          OK: ${{ steps.pixvox.outputs.ok }}
+          RESULT: ${{ steps.pixvox.outputs.result }}
+        run: |
+          test "$OK" = "true"
+          python -c "import json, os; d = json.load(open(os.environ['RESULT'], encoding='utf-8')); assert d['ok'] and len(d['assets']) == 2, d"
