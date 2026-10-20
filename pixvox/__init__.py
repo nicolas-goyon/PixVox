@@ -6,6 +6,8 @@ Boucle de travail :
     3. regarder, lire, corriger ;
     4. export_pack([...]) -> resource pack Java vérifié par re-rendu ;
        export_mod([...]) -> mod Fabric / NeoForge.
+
+Ligne de commande : `pixvox --help` (ou `python -m pixvox`) ; résultats --json : docs/cli.md.
 """
 from .anim import EMBER, FIRE, SOUL_EMBER, SOUL_FIRE, Anim, Timing, fire, flow, pulse
 from .assets import Block, Item, Model, MultiBlock, Plane, Props
