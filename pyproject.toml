@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling>=1.26"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
@@ -7,6 +7,8 @@ name = "pixvox"
 dynamic = ["version"]
 description = "Atelier pixel-art / voxel-art pour Minecraft Java piloté par code : rendu, analyse, resource packs vérifiés et mods Fabric / NeoForge."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
 authors = [{ name = "Nicolas Goyon" }]
 keywords = ["minecraft", "pixel-art", "voxel", "resource-pack", "mod", "fabric", "neoforge", "agent", "claude"]
@@ -47,7 +49,7 @@ path = "pixvox/__init__.py"
 packages = ["pixvox"]
 
 [tool.hatch.build.targets.sdist]
-include = ["pixvox", "tests", "examples", "docs", "README.md", "SKILL.md", "AGENTS.md", "CHANGELOG.md"]
+include = ["pixvox", "tests", "examples", "docs", "README.md", "SKILL.md", "AGENTS.md", "CHANGELOG.md", "LICENSE"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

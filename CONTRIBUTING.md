@@ -28,7 +28,7 @@ encodage explicite (ce qui casserait Windows).
 |---|---|---|
 | `CI` | chaque PR et `main` | lint ; tests (Linux 3.10 → 3.14, Windows, macOS) ; export vérifié + planches des exemples ; mods Fabric et NeoForge compilés + test JUnit ; action réutilisable ; livrables (wheel, skill, pack) ; image Docker |
 | `Aperçu des assets` | PR qui touche `examples/` ou `assets/` | planches + export des assets modifiés, commentaire de PR mis à jour |
-| `Release` | tag `vX.Y.Z` | release GitHub (wheel, sdist, skill, pack, jars), tag majeur `vX`, image `ghcr.io`, PyPI en option |
+| `Release` | lancement manuel (*Run workflow*) ou release publiée sur le site | contrôle du numéro ; release GitHub (wheel, sdist, skill, pack, jars), tag majeur `vX`, image `ghcr.io`, PyPI en option |
 
 Chaque job écrit un résumé lisible (onglet *Summary*) et ses sorties en artefacts, JSON compris.
 
@@ -46,11 +46,31 @@ l'asset, vérifie l'export et commente la PR avec le résumé et les liens des p
 
 ## Publier une version
 
-1. `pixvox/__init__.py` : `__version__ = "X.Y.Z"` ; `CHANGELOG.md` : nouvelle section `## [X.Y.Z]`.
-2. Fusionner sur `main`, puis `git tag vX.Y.Z && git push origin vX.Y.Z`.
-3. Le workflow « Release » publie : release GitHub et ses fichiers, tag `vX` pour l'action (si le jeton
-   GitHub en a le droit), image `ghcr.io/nicolas-goyon/pixvox`. Une version de test au sens PEP 440
-   (`0.2.0rc1`, tag `v0.2.0rc1`) est marquée *pre-release* et ne touche ni `:latest` ni `vX`.
-4. Une seule fois : rendre public le paquet `ghcr.io/nicolas-goyon/pixvox` (privé à sa création).
-   PyPI (facultatif, réserver le nom tôt) : créer un *trusted publisher* (dépôt `nicolas-goyon/PixVox`,
-   workflow `release.yml`, environnement `pypi`) puis la variable de dépôt `PYPI_PUBLISH=true`.
+Tout peut se faire depuis le site GitHub, sans rien installer.
+
+1. **Préparer**, sur `main` : `pixvox/__init__.py` : `__version__ = "X.Y.Z"` ; `CHANGELOG.md` : la
+   section `## [Non publié]` devient `## [X.Y.Z]` (en rouvrir une vide au-dessus). Sur le site : ouvrir
+   le fichier, crayon ✎, *Commit changes* (directement sur `main` ou par une PR).
+2. **Publier**, au choix :
+
+   | depuis | comment | ce qui se passe |
+   |---|---|---|
+   | site, onglet *Actions* (recommandé) | *Release* → *Run workflow* → cocher `publish` → *Run workflow* | tout est construit et vérifié, puis la release `vX.Y.Z` apparaît complète (environ 15 min) ; en cas d'échec, rien n'est publié |
+   | site, page *Releases* | *Draft a new release* → *Choose a tag* : taper `vX.Y.Z`, *Create new tag on publish*, cible `main` → *Publish release* | la release apparaît tout de suite, ses fichiers environ 15 min plus tard ; description laissée vide : remplie avec la section du CHANGELOG et la liste des PR ; un texte écrit est gardé tel quel |
+   | terminal (agent, script) | `gh workflow run release.yml -f publish=true`, suivi avec `gh run watch` ; ou `gh release create vX.Y.Z --target main --notes ""` | comme la ligne correspondante ci-dessus |
+
+   Le tag doit valoir `v` + `__version__` : sinon le workflow s'arrête au premier job, sans rien
+   construire (page *Releases* : supprimer la release et son tag, corriger, recommencer). Un tag poussé
+   seul (`git push origin vX.Y.Z`) ne publie rien. *Run workflow* sans cocher `publish` construit et
+   vérifie tout sans rien publier : une répétition générale.
+3. **Ce que publie le workflow « Release »** : la release GitHub et ses fichiers (wheel, sdist,
+   `pixvox_skill.zip`, pack de démo, mods de démo), le tag `vX` pour l'action (si le jeton GitHub en a
+   le droit), l'image `ghcr.io/nicolas-goyon/pixvox`. Une version de test au sens PEP 440 (`0.2.0rc1`)
+   ou une release cochée *Set as a pre-release* est marquée *pre-release* et ne touche ni `:latest`,
+   ni `:X.Y`, ni `vX`.
+4. **Une seule fois**, après la première version : rendre public le paquet `ghcr.io/nicolas-goyon/pixvox`
+   (privé à sa création : *Packages* → `pixvox` → *Package settings* → *Change visibility*). PyPI
+   (facultatif, réserver le nom tôt) : créer un *trusted publisher* (dépôt `nicolas-goyon/PixVox`,
+   workflow `release.yml`, environnement `pypi`) puis la variable de dépôt `PYPI_PUBLISH=true`. Si les
+   releases immuables sont activées dans les réglages du dépôt, publier par *Run workflow* : une release
+   déjà publiée ne peut plus recevoir de fichiers.

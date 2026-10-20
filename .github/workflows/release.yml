@@ -1,18 +1,31 @@
-# Publication d'une version : pousser un tag vX.Y.Z (même version que pixvox/__init__.py).
-#   - release GitHub avec : wheel + sdist, pixvox_skill.zip (skill Claude), pack de démo + datapack,
-#     mods de démo compilés (Fabric et NeoForge) ;
-#   - le tag majeur vX est déplacé si GitHub l'autorise (`uses: nicolas-goyon/PixVox@v0`) ;
-#   - image Docker ghcr.io/nicolas-goyon/pixvox:<version> (+ :latest pour une version stable) ;
-#   - PyPI seulement si la variable de dépôt PYPI_PUBLISH vaut "true" (publication de confiance à
-#     configurer une fois sur pypi.org, environnement « pypi »).
-# Version de test (0.2.0rc1, 0.2.0b1… au sens PEP 440) : release marquée « pre-release », ni :latest
-# ni tag majeur. Lancement manuel (workflow_dispatch) : construit tout sans rien publier.
+# Publication d'une version. Préalable : __version__ (pixvox/__init__.py) et section ## [X.Y.Z] de
+# CHANGELOG.md à jour sur main. Ensuite, au choix (détails dans CONTRIBUTING.md) :
+#   - site, onglet Actions : Release → Run workflow → cocher « publish » (recommandé) : tout est construit
+#     et vérifié AVANT que la release n'apparaisse ; le tag vX.Y.Z est créé sur le commit construit ;
+#   - site, page Releases : Draft a new release → tag vX.Y.Z (« Create new tag on publish », cible main)
+#     → Publish release : le workflow joint ensuite les fichiers ; une description laissée vide est
+#     remplie avec la section du CHANGELOG et la liste des PR, un texte écrit à la main est gardé ;
+#   - terminal : gh workflow run release.yml -f publish=true (ou gh release create vX.Y.Z --notes "").
+# Le tag doit valoir v + __version__ : sinon arrêt au premier job, rien n'est construit ni publié.
+# Fichiers de la release : wheel + sdist, pixvox_skill.zip (skill Claude), pack de démo + datapack,
+# mods de démo compilés (Fabric et NeoForge). Puis : tag majeur vX déplacé si GitHub l'autorise
+# (`uses: nicolas-goyon/PixVox@v0`) ; image ghcr.io/nicolas-goyon/pixvox:<version> (+ :X.Y et :latest
+# pour une version stable) ; PyPI seulement si la variable de dépôt PYPI_PUBLISH vaut "true"
+# (publication de confiance à configurer une fois sur pypi.org, environnement « pypi »).
+# Version de test (0.2.0rc1, 0.2.0b1… au sens PEP 440) ou case « Set as a pre-release » cochée :
+# release marquée pre-release, ni :X.Y, ni :latest, ni tag majeur.
+# Run workflow sans cocher « publish » : construit et vérifie tout, ne publie rien.
 name: Release
 
 on:
-  push:
-    tags: ["v*.*.*"]
+  release:
+    types: [published]
   workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publier la version de pixvox/__init__.py (décoché : construire et vérifier seulement)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -25,28 +38,33 @@ env:
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
 
 jobs:
-  dist:
-    name: paquet Python, skill, pack de démo
+  check:
+    name: version et tag
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.version.outputs.version }}
-      prerelease: ${{ steps.version.outputs.prerelease }}
+      version: ${{ steps.check.outputs.version }}
+      tag: ${{ steps.check.outputs.tag }}
+      prerelease: ${{ steps.check.outputs.prerelease }}
+      publish: ${{ steps.check.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Le tag correspond-il à pixvox/__init__.py ?
+        id: check
+        run: python scripts/release.py check
+
+  dist:
+    name: paquet Python, skill, pack de démo
+    needs: check
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
       - run: python -m pip install build -e .
-      - name: Version (PEP 440) et contrôle du tag
-        id: version
-        run: |
-          pkg=$(python -c "import pixvox; print(pixvox.__version__)")
-          pre=$(python -c "import pixvox; from packaging.version import Version; print(str(Version(pixvox.__version__).is_prerelease).lower())")
-          echo "version=$pkg" >> "$GITHUB_OUTPUT"
-          echo "prerelease=$pre" >> "$GITHUB_OUTPUT"
-          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
-            test "${GITHUB_REF_NAME#v}" = "$pkg" || { echo "::error::tag $GITHUB_REF_NAME ≠ version $pkg"; exit 1; }
-          fi
       - run: python scripts/build_dist.py --out dist --check
       - uses: actions/upload-artifact@v7
         with:
@@ -55,6 +73,7 @@ jobs:
 
   mods:
     name: mod de démo ${{ matrix.loader }}
+    needs: check
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
@@ -78,11 +97,13 @@ jobs:
           pixvox mod examples/*.py --modid pixvox_demo --name "Pixvox Demo" --loader ${{ matrix.loader }}
           --out out/mod --zip out/pixvox_demo_${{ matrix.loader }}_sources.zip --build --json > mod.json
       - name: Nommer le jar
+        env:
+          LOADER: ${{ matrix.loader }}
+          VERSION: ${{ needs.check.outputs.version }}
         run: |
-          ver=$(python -c "import pixvox; print(pixvox.__version__)")
           mkdir -p dist
-          cp out/mod/build/libs/pixvox_demo-1.0.0.jar "dist/pixvox_demo-${{ matrix.loader }}-26.3-pixvox$ver.jar"
-          cp out/pixvox_demo_${{ matrix.loader }}_sources.zip dist/
+          cp out/mod/build/libs/pixvox_demo-1.0.0.jar "dist/pixvox_demo-$LOADER-26.3-pixvox$VERSION.jar"
+          cp "out/pixvox_demo_${LOADER}_sources.zip" dist/
       - uses: actions/upload-artifact@v7
         with:
           name: mod-${{ matrix.loader }}
@@ -90,11 +111,16 @@ jobs:
 
   github-release:
     name: release GitHub
-    needs: [dist, mods]
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [check, dist, mods]
+    if: needs.check.outputs.publish == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ needs.check.outputs.tag }}
+      PRERELEASE: ${{ needs.check.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
@@ -106,31 +132,43 @@ jobs:
           pattern: mod-*
           path: dist
           merge-multiple: true
-      - name: Notes de version (CHANGELOG.md)
-        run: python scripts/release_notes.py "$GITHUB_REF_NAME" > notes.md
-      - uses: softprops/action-gh-release@v3
-        with:
-          files: dist/*
-          body_path: notes.md
-          generate_release_notes: true
-          prerelease: ${{ needs.dist.outputs.prerelease == 'true' }}
-      - name: Déplacer le tag majeur (uses …@vX), si GitHub l'autorise
-        if: needs.dist.outputs.prerelease != 'true'
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Notes de version (section du CHANGELOG)
+        run: python3 scripts/release.py notes "$TAG" > notes.md
+      - name: Créer la release, fichiers compris (lancement manuel)
+        if: github.event_name == 'workflow_dispatch'
         run: |
-          major="${GITHUB_REF_NAME%%.*}"
+          flags=(--target "$GITHUB_SHA" --title "$TAG" --notes-file notes.md --generate-notes)
+          if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
+          gh release create "$TAG" dist/* "${flags[@]}"
+      - name: Compléter la release publiée sur le site (fichiers, notes si laissées vides)
+        if: github.event_name == 'release'
+        run: |
+          gh release upload "$TAG" dist/* --clobber || {
+            echo "::error::fichiers refusés par GitHub (releases immuables ?) : publier plutôt par Actions → Release → Run workflow"
+            exit 1
+          }
+          body=$(gh release view "$TAG" --json body --jq .body)
+          if [ -z "${body//[[:space:]]/}" ]; then
+            printf '\n' >> notes.md
+            gh api -X POST "repos/$GITHUB_REPOSITORY/releases/generate-notes" -f tag_name="$TAG" --jq .body >> notes.md
+            gh release edit "$TAG" --notes-file notes.md
+          fi
+          if [ "$PRERELEASE" = "true" ]; then gh release edit "$TAG" --prerelease; fi
+      - name: Déplacer le tag majeur (uses …@vX), si GitHub l'autorise
+        if: needs.check.outputs.prerelease != 'true'
+        continue-on-error: true
+        run: |
+          major="${TAG%%.*}"
           if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$major" > /dev/null 2>&1; then
             gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/$major" -f sha="$GITHUB_SHA" -F force=true
           else
             gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$major" -f sha="$GITHUB_SHA"
-          fi || { echo "::warning::tag $major non déplacé (droits du jeton) : utiliser @$GITHUB_REF_NAME"; exit 1; }
+          fi || { echo "::warning::tag $major non déplacé (droits du jeton) : utiliser @$TAG"; exit 1; }
 
   docker:
     name: image Docker (ghcr.io)
-    needs: [dist, github-release]
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [check, github-release]
+    if: needs.check.outputs.publish == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -149,10 +187,11 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ghcr.io/${{ github.repository_owner }}/pixvox
+          flavor: latest=false
           tags: |
-            type=pep440,pattern={{version}}
-            type=pep440,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable=${{ needs.dist.outputs.prerelease != 'true' }}
+            type=pep440,pattern={{version}},value=${{ needs.check.outputs.version }}
+            type=pep440,pattern={{major}}.{{minor}},value=${{ needs.check.outputs.version }},enable=${{ needs.check.outputs.prerelease != 'true' }}
+            type=raw,value=latest,enable=${{ needs.check.outputs.prerelease != 'true' }}
       - uses: docker/build-push-action@v7
         with:
           context: .
@@ -164,8 +203,8 @@ jobs:
 
   pypi:
     name: PyPI (optionnel)
-    needs: [dist, github-release]
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && vars.PYPI_PUBLISH == 'true'
+    needs: [check, github-release]
+    if: needs.check.outputs.publish == 'true' && vars.PYPI_PUBLISH == 'true'
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
