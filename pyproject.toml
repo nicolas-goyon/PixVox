@@ -1,0 +1,67 @@
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pixvox"
+dynamic = ["version"]
+description = "Atelier pixel-art / voxel-art pour Minecraft Java piloté par code : rendu, analyse, resource packs vérifiés et mods Fabric / NeoForge."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Nicolas Goyon" }]
+keywords = ["minecraft", "pixel-art", "voxel", "resource-pack", "mod", "fabric", "neoforge", "agent", "claude"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Natural Language :: French",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Games/Entertainment",
+    "Topic :: Multimedia :: Graphics :: 3D Rendering",
+]
+dependencies = ["numpy>=1.24", "pillow>=10.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6", "pyyaml>=6"]
+
+[project.urls]
+Homepage = "https://github.com/nicolas-goyon/PixVox"
+Documentation = "https://github.com/nicolas-goyon/PixVox#readme"
+Issues = "https://github.com/nicolas-goyon/PixVox/issues"
+Changelog = "https://github.com/nicolas-goyon/PixVox/blob/main/CHANGELOG.md"
+
+[tool.hatch.version]
+path = "pixvox/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["pixvox"]
+
+[tool.hatch.build.targets.sdist]
+include = ["pixvox", "tests", "examples", "docs", "README.md", "SKILL.md", "AGENTS.md", "CHANGELOG.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+# avec PYTHONWARNDEFAULTENCODING=1 (CI) : un fichier ouvert sans encodage explicite dans pixvox = échec
+filterwarnings = ["error::EncodingWarning:pixvox"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+src = [".", "tests"]
+extend-exclude = ["out", "dist", "build"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "I", "UP"]
+# E501 : les gabarits Java/JSON de pixvox/mod.py ont des lignes longues ; B905 : zip() sans strict, volontaire
+ignore = ["E501", "B905"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["pixvox", "testkit"]
