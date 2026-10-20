@@ -56,3 +56,56 @@ jobs:
         run: python -m pip install -e ".[dev]"
       - name: Tests
         run: python -m pytest -q --durations=8
+
+  mods:
+    name: mod ${{ matrix.loader }} (Minecraft 26.3, JDK 25)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        loader: [fabric, neoforge]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "25"
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          add-job-summary: on-failure
+      - run: python -m pip install -e .
+      - name: Projet de mod, compilation et test JUnit (registres du jeu chargés, sans ouvrir le jeu)
+        env:
+          LOADER: ${{ matrix.loader }}
+        run: |
+          python - <<'EOF'
+          import glob, os, runpy
+          from pixvox import export_mod
+          assets = []
+          for f in sorted(glob.glob("examples/*.py")):
+              res = runpy.run_path(f)["build"]()
+              assets += res if isinstance(res, list) else [res]
+          loader = os.environ["LOADER"]
+          r = export_mod(assets, f"out/mod_{loader}", "pixvox_demo", "Pixvox Demo", loader=loader, build=True,
+                         zip_path=f"out/pixvox_demo_{loader}_sources.zip")
+          bad = [i["name"] for i in r["assets"] if i["verify"]["diff_px"] or i["verify"].get("missing")]
+          assert not bad, f"ressources non vérifiées : {bad}"
+          print("jar :", r["jar"])
+          EOF
+      - uses: actions/upload-artifact@v7
+        if: success() || failure()
+        with:
+          name: mod-${{ matrix.loader }}
+          path: |
+            out/mod_${{ matrix.loader }}/build/libs/*.jar
+            out/mod_${{ matrix.loader }}/build_log.txt
+            out/mod_${{ matrix.loader }}/build/test-results/
+            out/pixvox_demo_${{ matrix.loader }}_sources.zip
+          if-no-files-found: warn
+          retention-days: 14
