@@ -240,10 +240,13 @@ def test_export_for_minecraft_1_21_1():
         assert (root / "assets/minecraft/blockstates/stone.json").exists()
         paper = _read(root / "assets/minecraft/models/item/paper.json")
         assert paper["parent"] == "pixvox:item/item_test"                       # --replace du papier gardé
-        cmds = [o["predicate"]["custom_model_data"] for o in paper["overrides"]]
-        assert cmds == sorted(set(cmds)) and max(cmds) < 2 ** 24
-        assert {i["model"] for i in res["infos"]} <= {o["model"] for o in paper["overrides"]}
-        assert {i["custom_model_data"] for i in res["infos"]} <= set(cmds)
+        values = [o["predicate"]["custom_model_data"] for o in paper["overrides"]]
+        assert values == sorted(set(values)) and max(values) < 2 ** 24           # le dernier <= l'emporte
+        shown = {o["predicate"]["custom_model_data"]: o["model"] for o in paper["overrides"]}
+        for n, ref in shown.items():          # juste après chaque modèle, le papier (ou un autre modèle) : exact
+            assert ref == "minecraft:item/paper" or n + 1 in shown, (n, ref)
+        assert {i["model"] for i in res["infos"]} <= set(shown.values())
+        assert {i["custom_model_data"] for i in res["infos"]} <= set(shown)
         dp = tmp / "pack_datapack"
         assert _read(dp / "pack.mcmeta")["pack"]["pack_format"] == 48
         place = (dp / "data/pixvox/function/place/lamp_post.mcfunction").read_text(encoding="utf-8")
@@ -261,6 +264,18 @@ def test_export_for_minecraft_1_21_1():
             p.write_text(json.dumps(broken), encoding="utf-8")
             bad = ResourcePack(root, mc="1.21.1")._verify_ticks("pixvox:block/glow_ore", ore, ore.quads)
             assert bad["diff_px"] > 0, broken.keys()
+
+
+def test_1_21_1_custom_model_data_is_stable_and_collisions_are_reported():
+    with tmpdir() as tmp:
+        n = ResourcePack(tmp / "a", mc="1.21.1")._cmd("pixvox:block/one")
+        assert ResourcePack(tmp / "b", mc="1.21.1")._cmd("pixvox:block/one") == n          # tiré du nom
+        pack = ResourcePack(tmp / "c", mc="1.21.1")
+        taken = ResourcePack(tmp / "d", mc="1.21.1")._cmd("pixvox:block/col")
+        pack.cmd["pixvox:block/autre"] = taken                                   # son numéro est déjà pris
+        info = pack.add(Block("col", Volume(16, fill="#777777")))
+        assert info["custom_model_data"] == taken + 1
+        assert any("custom_model_data" in w for w in info["warnings"])
 
 
 def test_1_21_1_refuses_angles_the_game_rejects():

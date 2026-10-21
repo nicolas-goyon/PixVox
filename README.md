@@ -108,7 +108,7 @@ ratée), `2` erreur d'utilisation ou d'environnement, `3` erreur interne.
 | `pixvox mod F.py… --modid ID [--loader neoforge] --build` | projet de mod + `.jar` |
 | `pixvox view F.py --yaw 135 --pitch 20 [--persp 2] [--shading night] [--tick 6]` | angle libre |
 | `pixvox anim F.py` / `compare F.py…` / `ascii F.py --face north` | animation, variantes, pixels exacts |
-| `pixvox render-model PACK ns:block/nom` | aperçu d'un modèle JSON quelconque (pack fait main, Blockbench) |
+| `pixvox render-model PACK ns:block/nom [--mc 1.21.1]` | aperçu d'un modèle JSON quelconque (pack fait main, Blockbench), lu comme la version choisie |
 | `pixvox doctor` / `summary result.json` | diagnostic / résumé Markdown d'un résultat `--json` |
 
 ## Exemples

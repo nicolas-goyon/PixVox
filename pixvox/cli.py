@@ -8,7 +8,7 @@
            [--mc 1.21.4+|1.21.1]
   mod      fichier.py [autre.py…] --modid mon_mod [--loader fabric|neoforge] [--build] [--java-home JDK25]
   compare  fichier.py [autre.py…] [--out FICHIER.png] [--size 300]
-  render-model DOSSIER_PACK ns:block/nom [--out FICHIER.png] [--yaw 225] [--pitch 30] [--tick T]
+  render-model DOSSIER_PACK ns:block/nom [--out FICHIER.png] [--yaw 225] [--pitch 30] [--tick T] [--mc 1.21.1]
   new      nom [--kind block|model|multiblock|item|animated] [--dir .]   crée un fichier d'asset de départ
   doctor   [--java-home JDK25]                                       vérifie l'installation (+ export test)
   summary  résultat.json [--format markdown|text]                    résumé lisible d'un résultat --json
@@ -379,7 +379,7 @@ def cmd_render_model(args, out) -> int:
     from .render import fit_camera, render
     if not (Path(args.pack) / "assets").is_dir():
         raise CliError(f"{args.pack} : pas un resource pack (dossier assets/ absent)", file=args.pack)
-    loader = ModelLoader([args.pack], tick=args.tick)
+    loader = ModelLoader([args.pack], tick=args.tick, mc=args.mc)
     try:
         q = loader.quads(args.model)
     except (FileNotFoundError, KeyError, ValueError) as e:
@@ -567,6 +567,8 @@ def build_parser() -> argparse.ArgumentParser:
     m.add_argument("--tick", type=float, default=0, help="instant des textures animées (lu dans les .mcmeta)")
     m.add_argument("--persp", type=float, default=0.0)
     m.add_argument("--size", type=_positive, default=600, help="taille de l'image en pixels")
+    m.add_argument("--mc", default=MC_TARGETS[0], choices=MC_TARGETS,
+                   help="lire le modèle comme cette version : 1.21.4+ (défaut) ou 1.21.1 (neoforge_data, render_type)")
     n = add("new", "crée un fichier d'asset de départ, prêt à modifier")
     n.add_argument("name", help="nom de l'asset (minuscules, chiffres, _)")
     n.add_argument("--kind", default="block", choices=KINDS, help="type d'asset (défaut : block)")

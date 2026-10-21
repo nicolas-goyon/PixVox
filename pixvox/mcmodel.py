@@ -12,8 +12,8 @@ Deux lectures, comme les deux familles de versions du jeu (mc=) :
              transparence des textures (26.x) ;
   "1.21.1"   NeoForge 21.1 : lumière dans neoforge_data (block_light), light_emission et
              shade_direction_override ignorés (inconnus), couche de rendu lue dans render_type (absent :
-             solide, l'alpha ne compte pas ; cutout : texel jeté sous 0,1 d'alpha, opaque sinon), rotation
-             d'élément -45 / -22,5 / 0 / 22,5 / 45 seulement.
+             solide, l'alpha ne compte pas ; cutout : texel jeté sous 0,1 d'alpha, opaque sinon ; mipped :
+             sous 0,5), rotation d'élément -45 / -22,5 / 0 / 22,5 / 45 seulement, forge_data refusé.
 """
 from __future__ import annotations
 
@@ -86,9 +86,10 @@ def norm_id(ref: str) -> str:
 
 
 DIALECTS = ("1.21.4+", "1.21.1")
-# render_type de NeoForge 21.1 (NamedRenderTypeManager) -> manière dont la couche traite l'alpha
-LAYERS = {"solid": "solid", "cutout": "cutout", "cutout_mipped": "cutout", "cutout_mipped_all": "cutout",
-          "translucent": "translucent", "tripwire": "translucent"}
+# render_type de NeoForge 21.1 (NamedRenderTypeManager) -> (alpha sous lequel le shader jette le texel,
+# texels gardés opaques) ; seuils des shaders rendertype_*.fsh du jar 1.21.1 (0,1 -> 26, 0,5 -> 128)
+LAYERS = {"solid": (0, True), "cutout": (26, True), "cutout_mipped": (128, True), "cutout_mipped_all": (128, True),
+          "translucent": (0, False), "tripwire": (26, False)}
 ANGLES_1_21_1 = (-45.0, -22.5, 0.0, 22.5, 45.0)      # BlockElement 1.21.1 : « only -45/-22.5/0/22.5/45 allowed »
 
 
@@ -96,16 +97,19 @@ def render_layer(render_type: str | None) -> str:
     """Couche d'un modèle 1.21.1 d'après render_type ("cutout" = "minecraft:cutout") ; absent ou inconnu :
     solide (couche par défaut d'un bloc)."""
     ns, _, path = (render_type or "").rpartition(":")
-    return LAYERS.get(path, "solid") if (ns or "minecraft") == "minecraft" else "solid"
+    return path if path in LAYERS and (ns or "minecraft") == "minecraft" else "solid"
 
 
 def layer_texture(tex: np.ndarray, layer: str) -> np.ndarray:
     """Texture telle que la couche la dessine : solide = alpha ignoré (texels transparents opaques) ;
-    cutout = texel jeté sous 0,1 d'alpha (shader du jeu), opaque au-dessus ; translucide = inchangée."""
-    if layer == "translucent":
+    cutout = texel jeté sous le seuil du shader, opaque au-dessus ; translucide = mélangée (tripwire :
+    jetée sous 0,1, puis mélangée)."""
+    cut, opaque = LAYERS[layer]
+    if not cut and not opaque:
         return tex
     t = np.array(tex, copy=True)
-    t[..., 3] = 255 if layer == "solid" else np.where(t[..., 3] < 26, 0, 255)
+    a = t[..., 3]
+    t[..., 3] = np.where(a < cut, 0, 255 if opaque else a)
     return t
 
 
@@ -289,9 +293,12 @@ def element_quads(el: dict, tex_lookup, offset=(0.0, 0.0, 0.0), mc: str = "1.21.
     to = np.asarray(el["to"], float)
     lim = {"min": frm, "max": to}
     legacy = mc == "1.21.1"
-    if legacy and "rotation" in el and float(el["rotation"].get("angle", 0)) not in ANGLES_1_21_1:
+    if legacy and "rotation" in el and el["rotation"].get("angle") not in ANGLES_1_21_1:
         raise ValueError(f"rotation d'élément de {el['rotation'].get('angle')}° : Minecraft 1.21.1 refuse ce modèle "
-                         "(-45, -22,5, 0, 22,5 ou 45 seulement)")
+                         "(angle obligatoire : -45, -22,5, 0, 22,5 ou 45)")
+    if legacy and ("forge_data" in el or any("forge_data" in fd for fd in el.get("faces", {}).values())):
+        raise ValueError("forge_data : NeoForge 21.1 refuse ce modèle (« forge_data should be replaced by "
+                         "neoforge_data »)")
     out = []
     for face, fd in el.get("faces", {}).items():
         tex = tex_lookup(fd["texture"])
@@ -319,7 +326,7 @@ def element_quads(el: dict, tex_lookup, offset=(0.0, 0.0, 0.0), mc: str = "1.21.
             shade, shade_dir = True, sdo
         facing = closest_face(normal) if "rotation" in el else face
         # NeoForge : neoforge_data de la face, sinon celui de l'élément ; block_light = lueur la nuit
-        nd = fd.get("neoforge_data") or el.get("neoforge_data") or {}
+        nd = fd["neoforge_data"] if "neoforge_data" in fd else el.get("neoforge_data") or {}
         emission = max(int(nd.get("block_light", 0)), 0 if legacy else int(el.get("light_emission", 0)))
         out.append(Quad(v0, verts[1] - verts[0], verts[3] - verts[0], uvs[0], uvs[1], uvs[3], tex,
                         normal, facing, shade, tag="mc", emission=emission, shade_dir=shade_dir))

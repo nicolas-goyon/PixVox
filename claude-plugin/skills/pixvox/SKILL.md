@@ -49,7 +49,8 @@ Sources, exemples, CI : https://github.com/nicolas-goyon/PixVox (consignes : AGE
 
 Options utiles : `--only NOM` ; `review --out DOSSIER` ; `view --size N` ; `compare --size N` ;
 `export --ns NAMESPACE --replace nom=minecraft:bloc` ; `anim fichier.py` (planche + GIF seuls) ;
-`render-model DOSSIER_PACK ns:block/nom [--tick T] [--shading night] [--persp 2]` relit un modèle JSON.
+`render-model DOSSIER_PACK ns:block/nom [--tick T] [--shading night] [--persp 2] [--mc 1.21.1]` relit un
+modèle JSON (`--mc 1.21.1` : comme NeoForge 1.21.1 le lit).
 
 Résultats exploitables : ajouter `--json` à n'importe quelle commande → un seul document JSON sur la
 sortie standard (journal sur stderr), codes de sortie 0 réussi / 1 vérification échouée / 2 utilisation
@@ -283,12 +284,14 @@ perlin(shape, cells=4, seed=0, octaves=1)   # shape 2D, 3D… ou 4D (x, y, z, te
   `light_emission` ni `shade_direction_override` : la lumière devient `"neoforge_data": {"block_light": n,
   "sky_light": n}` (lue par NeoForge seulement : vanilla et Fabric affichent sans lueur, l'export le dit
   par une ligne ATTENTION). `forge_data` fait échouer le chargement : ne jamais l'écrire.
-- Rotation d'élément : -45, -22,5, 0, 22,5 ou 45° seulement ; un plan à un autre angle refuse l'export.
+- Rotation d'élément : -45, -22,5, 0, 22,5 ou 45° seulement. Un plan à un angle multiple de 22,5° passe
+  (au-delà de ±45°, il est posé sur l'autre axe) ; à un autre angle (30°…), l'export est refusé.
 - Couche de rendu : `render_type` (NeoForge ; absent = solide, l'alpha ne compte pas), écrit dès qu'une
   face a de la transparence, surcouche lumineuse d'un `Block` comprise (`minecraft:cutout`). Sous
   Fabric, la couche se déclare dans le mod.
 - Tests sans mod : le papier porte chaque modèle (`assets/minecraft/models/item/paper.json`),
-  `/give @s minecraft:paper[minecraft:custom_model_data=N]`, N stable (tiré du nom) et listé dans
+  `/give @s minecraft:paper[minecraft:custom_model_data=N]`, N tiré du nom (stable sauf collision,
+  signalée par une ligne ATTENTION) et listé dans
   `README_pixvox.txt` ; `--replace` écrit `models/item/<bloc>.json`.
 - Dans un mod NeoForge 1.21.1 : copier `assets/<ns>/` (modèles, textures, blockstates, `models/item`) dans
   les ressources du mod. `pixvox mod` produit des mods 26.3.
