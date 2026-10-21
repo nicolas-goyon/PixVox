@@ -5,6 +5,7 @@
   anim     fichier.py [--only NOM] [--out DOSSIER]                 images d'une animation + GIF
   ascii    fichier.py [--only NOM] [--face up|down|north|south|west|east]
   export   fichier.py [autre.py…] [--pack DOSSIER] [--ns pixvox] [--zip FICHIER.zip] [--replace nom=minecraft:stone]
+           [--mc 1.21.4+|1.21.1]
   mod      fichier.py [autre.py…] --modid mon_mod [--loader fabric|neoforge] [--build] [--java-home JDK25]
   compare  fichier.py [autre.py…] [--out FICHIER.png] [--size 300]
   render-model DOSSIER_PACK ns:block/nom [--out FICHIER.png] [--yaw 225] [--pitch 30] [--tick T]
@@ -37,9 +38,10 @@ from pathlib import Path
 from . import __version__
 from ._io import OutputDirError, say
 
-SCHEMA = "pixvox.result/1"
+SCHEMA = "pixvox.result/2"          # /2 : export indique la version de Minecraft visée (champ mc)
 EXIT_OK, EXIT_FAILED, EXIT_USAGE, EXIT_INTERNAL = 0, 1, 2, 3
 KINDS = ("block", "model", "multiblock", "item", "animated")
+MC_TARGETS = ("1.21.4+", "1.21.1")  # = pixvox.export.TARGETS (sans importer numpy pour --help)
 FACE_ALIASES = {"top": "up", "bottom": "down", "haut": "up", "dessus": "up", "bas": "down", "dessous": "down",
                 "nord": "north", "sud": "south", "ouest": "west", "est": "east"}
 
@@ -288,9 +290,9 @@ def cmd_export(args, out) -> int:
     pack = Path(args.pack)
     _check_outputs(args.files, pack, pack.parent / f"{pack.name}_datapack")
     pairs = _load_many(args.files)
-    res = export_assets([a for _, a in pairs], args.pack, args.ns, args.zip, _replacements(args.replace))
+    res = export_assets([a for _, a in pairs], args.pack, args.ns, args.zip, _replacements(args.replace), mc=args.mc)
     out.update({"pack": res["pack"], "zip": res["zip"], "datapack": res["datapack"],
-                "datapack_zip": res["datapack_zip"], "namespace": args.ns})
+                "datapack_zip": res["datapack_zip"], "namespace": args.ns, "mc": res["mc"]})
     out["assets"] = _export_entries(pairs, res["infos"])
     files = {a.name: f for f, a in pairs}
     out["refused"] = [{"name": n, "file": Path(files[n]).as_posix(), "message": m} for n, m in res["refused"]]
@@ -537,6 +539,9 @@ def build_parser() -> argparse.ArgumentParser:
     e.add_argument("--zip", help="FICHIER .zip à produire en plus")
     e.add_argument("--replace", action="append", default=[], metavar="NOM=minecraft:BLOC",
                    help="remplace l'apparence d'un bloc/item vanilla sans propriétés (répétable)")
+    e.add_argument("--mc", default=MC_TARGETS[0], choices=MC_TARGETS,
+                   help="version de Minecraft visée : 1.21.4+ (défaut, 1.21.4 → 26.3) ou 1.21.1 (NeoForge 21.1 : "
+                        "models/item, neoforge_data, render_type)")
     md = add("mod", "projet de mod Fabric ou NeoForge 26.3 (vrais blocs) ; --build compile le .jar")
     md.add_argument("files", nargs="+")
     md.add_argument("--modid", default="pixvox_mod", help="identifiant du mod (minuscules, chiffres, _)")

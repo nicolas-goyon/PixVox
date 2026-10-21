@@ -6,6 +6,14 @@ BlockFaceUV = rotation des UV). Rendre un modèle exporté avec ce module puis l
 direct du volume valide l'export pixel par pixel.
 
 Aussi utilisable pour prévisualiser n'importe quel modèle d'un resource pack (ex. sortie Blockbench).
+
+Deux lectures, comme les deux familles de versions du jeu (mc=) :
+  "1.21.4+"  (défaut) light_emission et shade_direction_override ; couche de rendu déduite de la
+             transparence des textures (26.x) ;
+  "1.21.1"   NeoForge 21.1 : lumière dans neoforge_data (block_light), light_emission et
+             shade_direction_override ignorés (inconnus), couche de rendu lue dans render_type (absent :
+             solide, l'alpha ne compte pas ; cutout : texel jeté sous 0,1 d'alpha, opaque sinon), rotation
+             d'élément -45 / -22,5 / 0 / 22,5 / 45 seulement.
 """
 from __future__ import annotations
 
@@ -77,6 +85,30 @@ def norm_id(ref: str) -> str:
     return ref if ":" in ref else "minecraft:" + ref
 
 
+DIALECTS = ("1.21.4+", "1.21.1")
+# render_type de NeoForge 21.1 (NamedRenderTypeManager) -> manière dont la couche traite l'alpha
+LAYERS = {"solid": "solid", "cutout": "cutout", "cutout_mipped": "cutout", "cutout_mipped_all": "cutout",
+          "translucent": "translucent", "tripwire": "translucent"}
+ANGLES_1_21_1 = (-45.0, -22.5, 0.0, 22.5, 45.0)      # BlockElement 1.21.1 : « only -45/-22.5/0/22.5/45 allowed »
+
+
+def render_layer(render_type: str | None) -> str:
+    """Couche d'un modèle 1.21.1 d'après render_type ("cutout" = "minecraft:cutout") ; absent ou inconnu :
+    solide (couche par défaut d'un bloc)."""
+    ns, _, path = (render_type or "").rpartition(":")
+    return LAYERS.get(path, "solid") if (ns or "minecraft") == "minecraft" else "solid"
+
+
+def layer_texture(tex: np.ndarray, layer: str) -> np.ndarray:
+    """Texture telle que la couche la dessine : solide = alpha ignoré (texels transparents opaques) ;
+    cutout = texel jeté sous 0,1 d'alpha (shader du jeu), opaque au-dessus ; translucide = inchangée."""
+    if layer == "translucent":
+        return tex
+    t = np.array(tex, copy=True)
+    t[..., 3] = 255 if layer == "solid" else np.where(t[..., 3] < 26, 0, 255)
+    return t
+
+
 def missing_texture() -> np.ndarray:
     t = np.zeros((16, 16, 4), np.uint8)
     t[..., 3] = 255
@@ -88,11 +120,14 @@ def missing_texture() -> np.ndarray:
 class ModelLoader:
     """Charge des modèles depuis un ou plusieurs dossiers de resource pack (contenant assets/)."""
 
-    def __init__(self, pack_roots=(), extra_textures: dict | None = None, tick: float = 0):
+    def __init__(self, pack_roots=(), extra_textures: dict | None = None, tick: float = 0, mc: str = "1.21.4+"):
+        if mc not in DIALECTS:
+            raise ValueError(f"mc={mc!r} : choisir parmi {', '.join(DIALECTS)}")
         self.roots = [Path(p) for p in pack_roots]
         self.extra = dict(extra_textures or {})
         self.missing: list[str] = []
         self.tick = tick              # textures animées : image affichée à ce tick (lu dans le .png.mcmeta)
+        self.mc = mc                  # lecture du jeu visé (voir l'en-tête du module)
         self._cache: dict = {}        # une seule copie de chaque texture (un atlas peut servir à 5000 faces)
 
     def _find(self, kind: str, ref: str, ext: str):
@@ -122,7 +157,7 @@ class ModelLoader:
             parent = m.get("parent")
             m = self.raw_model(parent) if parent else None
             seen += 1
-        textures, elements, builtin, ao = {}, None, None, True
+        textures, elements, builtin, ao, rt = {}, None, None, True, None
         for m in reversed(chain):
             textures.update(m.get("textures", {}))
             if "elements" in m:
@@ -131,7 +166,10 @@ class ModelLoader:
                 builtin = m["builtin"]
             if "ambientocclusion" in m:
                 ao = m["ambientocclusion"]
-        return {"textures": textures, "elements": elements or [], "builtin": builtin, "ambientocclusion": ao}
+            if "render_type" in m:                    # NeoForge : celui du modèle, sinon celui du parent
+                rt = m["render_type"]
+        return {"textures": textures, "elements": elements or [], "builtin": builtin, "ambientocclusion": ao,
+                "render_type": rt}
 
     def texture(self, ref: str) -> np.ndarray:
         ref = norm_id(ref)
@@ -195,20 +233,27 @@ class ModelLoader:
         res = self.resolve(model)
         out = []
         off = np.asarray(offset, float)
+        layer = render_layer(res["render_type"]) if self.mc == "1.21.1" else None
         for el in res["elements"]:
-            out += element_quads(el, lambda key: self._tex_for(res["textures"], key), off)
+            out += element_quads(el, lambda key: self._tex_for(res["textures"], key, layer), off, self.mc)
         if res["builtin"] == "generated":
-            layer = self._deref(res["textures"], "#layer0")
-            if layer:
-                out += flat_item_quads(self.texture(layer), off)
+            layer0 = self._deref(res["textures"], "#layer0")
+            if layer0:
+                out += flat_item_quads(self.texture(layer0), off)
         return out
 
-    def _tex_for(self, textures, key):
+    def _tex_for(self, textures, key, layer: str | None = None):
         ref = self._deref(textures, key)
         if ref is None:
             self.missing.append(key)
             return missing_texture()
-        return self.texture(ref)
+        tex = self.texture(ref)
+        if layer is None:
+            return tex
+        k = (norm_id(ref), self.tick, layer)
+        if k not in self._cache:
+            self._cache[k] = layer_texture(tex, layer)
+        return self._cache[k]
 
 
 def _rot_matrix(rot: dict) -> np.ndarray:
@@ -238,11 +283,15 @@ def _rotate(points: np.ndarray, rot: dict) -> np.ndarray:
     return p + origin
 
 
-def element_quads(el: dict, tex_lookup, offset=(0.0, 0.0, 0.0)) -> list:
+def element_quads(el: dict, tex_lookup, offset=(0.0, 0.0, 0.0), mc: str = "1.21.4+") -> list:
     offset = np.asarray(offset, float)
     frm = np.asarray(el["from"], float)
     to = np.asarray(el["to"], float)
     lim = {"min": frm, "max": to}
+    legacy = mc == "1.21.1"
+    if legacy and "rotation" in el and float(el["rotation"].get("angle", 0)) not in ANGLES_1_21_1:
+        raise ValueError(f"rotation d'élément de {el['rotation'].get('angle')}° : Minecraft 1.21.1 refuse ce modèle "
+                         "(-45, -22,5, 0, 22,5 ou 45 seulement)")
     out = []
     for face, fd in el.get("faces", {}).items():
         tex = tex_lookup(fd["texture"])
@@ -261,17 +310,19 @@ def element_quads(el: dict, tex_lookup, offset=(0.0, 0.0, 0.0)) -> list:
             v = uv[1] if j in (0, 3) else uv[3]
             uvs.append((u * tw / 16.0, v * th / 16.0))
         v0 = verts[0] + offset
-        shade = bool(fd.get("shade", el.get("shade", True)))
-        sdo = el.get("shade_direction_override")
+        shade = bool(el.get("shade", True)) if legacy else bool(fd.get("shade", el.get("shade", True)))
+        sdo = None if legacy else el.get("shade_direction_override")
         shade_dir = None
         if sdo == "up":
             shade = False                                   # remplace "shade": false depuis 26.x
         elif sdo:
             shade, shade_dir = True, sdo
         facing = closest_face(normal) if "rotation" in el else face
+        # NeoForge : neoforge_data de la face, sinon celui de l'élément ; block_light = lueur la nuit
+        nd = fd.get("neoforge_data") or el.get("neoforge_data") or {}
+        emission = max(int(nd.get("block_light", 0)), 0 if legacy else int(el.get("light_emission", 0)))
         out.append(Quad(v0, verts[1] - verts[0], verts[3] - verts[0], uvs[0], uvs[1], uvs[3], tex,
-                        normal, facing, shade, tag="mc", emission=int(el.get("light_emission", 0)),
-                        shade_dir=shade_dir))
+                        normal, facing, shade, tag="mc", emission=emission, shade_dir=shade_dir))
     return out
 
 

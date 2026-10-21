@@ -72,6 +72,9 @@ def test_bad_args_and_missing_files_are_reported():
     with tmpdir() as tmp:
         o = _run(tmp, PIXVOX_CMD="export", PIXVOX_FILES="x.py", PIXVOX_ARGS="--zip 'non fermé")
         assert o["exit-code"] == "2" and o["ok"] == "false"                 # jamais un faux succès
+        from pixvox.cli import SCHEMA
+        doc = json.loads((tmp / "out" / "pixvox-export.json").read_text(encoding="utf-8"))
+        assert doc["schema"] == SCHEMA                                      # même contrat que pixvox --json
         o = _run(tmp, PIXVOX_CMD="export", PIXVOX_FILES="absent_*.py", PIXVOX_ARGS="",
                  PIXVOX_ARTIFACT_NAME="mon-artefact", PIXVOX_UPLOAD_PATH="out/*.zip\n!out/x")
         assert o["exit-code"] == "2" and o["artifact-name"] == "mon-artefact"

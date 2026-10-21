@@ -1,6 +1,6 @@
 ---
 name: pixvox
-description: "Atelier pixel-art et voxel-art pour Minecraft Java (1.21.4 → 26.3), piloté par code. Blocs pleins dont les 6 textures sont lues sur un volume (arêtes cohérentes par construction), modèles voxel exportés en éléments optimisés, objets de plusieurs blocs (statues), résolution libre (16, 32, 64 voxels par bloc, objets décrits une fois puis mis à l'échelle), textures animées (feu, lave, braises, plans de flammes, parties lumineuses), items 16x16 en ASCII. Rendu (inventaire, dessous, monde 3x3x3, nuit, GIF), analyse texte, export resource pack vérifié par re-rendu, et export en MOD Fabric ou NeoForge 26.3 (vrais blocs : formes, lumière, particules, multiblocs posables, compilés et testés). À utiliser pour créer, corriger ou vérifier une texture, un bloc, un item, une icône, un modèle ou un mod de blocs Minecraft."
+description: "Atelier pixel-art et voxel-art pour Minecraft Java (1.21.4 → 26.3, et 1.21.1 NeoForge avec --mc 1.21.1), piloté par code. Blocs pleins dont les 6 textures sont lues sur un volume (arêtes cohérentes par construction), modèles voxel exportés en éléments optimisés, objets de plusieurs blocs (statues), résolution libre (16, 32, 64 voxels par bloc, objets décrits une fois puis mis à l'échelle), textures animées (feu, lave, braises, plans de flammes, parties lumineuses), items 16x16 en ASCII. Rendu (inventaire, dessous, monde 3x3x3, nuit, GIF), analyse texte, export resource pack vérifié par re-rendu, et export en MOD Fabric ou NeoForge 26.3 (vrais blocs : formes, lumière, particules, multiblocs posables, compilés et testés). À utiliser pour créer, corriger ou vérifier une texture, un bloc, un item, une icône, un modèle ou un mod de blocs Minecraft."
 ---
 <!-- Fichier généré par scripts/sync_plugin_skill.py depuis SKILL.md : modifier SKILL.md, puis relancer le script. -->
 
@@ -40,6 +40,8 @@ Sources, exemples, CI : https://github.com/nicolas-goyon/PixVox (consignes : AGE
    paraît creux, « déformé »). `--shading night` : seules les faces à light_emission restent claires.
 6. Resource pack : `python -m pixvox export assets/*.py --pack out/pack --zip out/pack.zip`. Un modèle que le
    jeu refuserait (élément hors de [-16, 32]) est REFUSÉ (ExportError, code de sortie 1), pas exporté.
+   Pour Minecraft 1.21.1 (mod NeoForge 21.1) : `--mc 1.21.1` (`export_pack(…, mc="1.21.1")`) — fichiers
+   chargés tels quels par 1.21.1 et vérifiés comme 1.21.1 les lit (voir « Pièges connus »).
 7. Mod : `python -m pixvox mod assets/*.py --modid mon_mod [--loader fabric|neoforge] --build
    --java-home <JDK 25> --zip out/mon_mod_src.zip` → `out/mod_<modid>_<loader>/build/libs/<modid>-1.0.0.jar`.
 8. Livrer les zips / le jar + la planche (et le GIF). `README_pixvox.txt` (pack) et `README.md` (mod)
@@ -272,9 +274,29 @@ perlin(shape, cells=4, seed=0, octaves=1)   # shape 2D, 3D… ou 4D (x, y, z, te
 - `--replace` : seulement des blocs vanilla sans propriétés. Pour tester un modèle lumineux sans mod :
   `--replace nom=minecraft:torch` (sans propriétés, lumière 14, rendu cutout) ; un vrai bloc = un mod.
 
+## Repères 1.21.1 (`--mc 1.21.1`, vérifiés dans le jar 1.21.1 et les sources de NeoForge 21.1)
+
+- `pack.mcmeta` : format 34 (datapack 48, dossier `function/`). Pas de dossier `items/` ni de composant
+  `item_model` : un item = `models/item/<nom>.json` (parent : le modèle du bloc) ; `custom_model_data` est
+  un entier et sert aux `overrides`.
+- Élément : `from`, `to`, `rotation`, `faces`, `shade` (vanilla) + `neoforge_data` (NeoForge). Ni
+  `light_emission` ni `shade_direction_override` : la lumière devient `"neoforge_data": {"block_light": n,
+  "sky_light": n}` (lue par NeoForge seulement : vanilla et Fabric affichent sans lueur, l'export le dit
+  par une ligne ATTENTION). `forge_data` fait échouer le chargement : ne jamais l'écrire.
+- Rotation d'élément : -45, -22,5, 0, 22,5 ou 45° seulement ; un plan à un autre angle refuse l'export.
+- Couche de rendu : `render_type` (NeoForge ; absent = solide, l'alpha ne compte pas), écrit dès qu'une
+  face a de la transparence, surcouche lumineuse d'un `Block` comprise (`minecraft:cutout`). Sous
+  Fabric, la couche se déclare dans le mod.
+- Tests sans mod : le papier porte chaque modèle (`assets/minecraft/models/item/paper.json`),
+  `/give @s minecraft:paper[minecraft:custom_model_data=N]`, N stable (tiré du nom) et listé dans
+  `README_pixvox.txt` ; `--replace` écrit `models/item/<bloc>.json`.
+- Dans un mod NeoForge 1.21.1 : copier `assets/<ns>/` (modèles, textures, blockstates, `models/item`) dans
+  les ressources du mod. `pixvox mod` produit des mods 26.3.
+
 ## Tester en jeu
 
-Sans mod (1.21.4+) :
+Sans mod (1.21.4+ ; en 1.21.1 : `/give @s minecraft:paper[minecraft:custom_model_data=N]`, voir le
+`README_pixvox.txt` du pack) :
 ```
 /give @s minecraft:stone[minecraft:item_model="pixvox:<nom>"]
 /execute align xyz run summon minecraft:item_display ~0.5 ~0.5 ~0.5 {Rotation:[180f,0f],item:{id:"minecraft:stone",count:1,components:{"minecraft:item_model":"pixvox:<nom>"}}}

@@ -7,7 +7,7 @@ Conçu pour être utilisé par un agent (Claude, Codex…), un humain ou un autr
 
 [![CI](https://github.com/nicolas-goyon/PixVox/actions/workflows/ci.yml/badge.svg)](https://github.com/nicolas-goyon/PixVox/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.10%20→%203.14-blue)
-![Minecraft](https://img.shields.io/badge/Minecraft-1.21.4%20→%2026.3-62a03e)
+![Minecraft](https://img.shields.io/badge/Minecraft-1.21.1%20·%201.21.4%20→%2026.3-62a03e)
 [![Licence MIT](https://img.shields.io/badge/licence-MIT-informational)](LICENSE)
 
 > **In English:** pixvox is a code-driven pixel/voxel art workshop for Minecraft Java. Describe assets
@@ -37,7 +37,10 @@ construction.
 - **Planches de revue** : inventaire, dessous en perspective, monde 3×3×3, nuit, taille réelle, patron
   des textures, analyse (raccords, palette, boucle d'animation…), GIF.
 - **Export vérifié** : chaque modèle et chaque texture écrits sur disque sont relus et rendus comme le
-  jeu, sous 6 angles et à chaque image d'animation ; 0 pixel d'écart attendu.
+  jeu, sous 6 angles plus 2 vues de nuit, puis à chaque image d'animation ; 0 pixel d'écart attendu.
+- **Deux familles de versions** : Minecraft 1.21.4 → 26.3 (défaut) ou 1.21.1 avec `--mc 1.21.1`
+  (NeoForge 21.1 : `models/item`, lumière en `neoforge_data`, `render_type`) ; la vérification porte sur
+  les fichiers de la version visée.
 - **Mods Minecraft 26.3** (Fabric ou NeoForge) : vrais blocs avec collision calculée depuis les voxels,
   lumière, particules, orientation, multiblocs posés d'un coup, tables de butin, test JUnit.
 
@@ -76,8 +79,10 @@ def build():
 ```
 
 Tester en jeu sans mod (1.21.4+) : copier le pack dans `resourcepacks/`, puis
-`/give @s minecraft:stone[minecraft:item_model="pixvox:mon_minerai"]`. Avec le mod : le `.jar` dans
-`mods/` (et Fabric API pour Fabric).
+`/give @s minecraft:stone[minecraft:item_model="pixvox:mon_minerai"]`. En 1.21.1 (`--mc 1.21.1`) : les
+modèles sont portés par le papier, `/give @s minecraft:paper[minecraft:custom_model_data=N]` (N pour
+chaque asset dans `README_pixvox.txt` du pack). Avec le mod : le `.jar` dans `mods/` (et Fabric API pour
+Fabric).
 
 ## Pour les agents et les logiciels
 
@@ -99,7 +104,7 @@ ratée), `2` erreur d'utilisation ou d'environnement, `3` erreur interne.
 |---|---|
 | `pixvox new NOM --kind …` | fichier d'asset de départ |
 | `pixvox review F.py` | planche PNG + rapport (+ planche d'animation et GIF) |
-| `pixvox export F.py… --pack D --zip Z` | resource pack vérifié (+ datapack de placement des multiblocs) |
+| `pixvox export F.py… --pack D --zip Z [--mc 1.21.1]` | resource pack vérifié (+ datapack de placement des multiblocs) ; `--mc 1.21.1` pour NeoForge 1.21.1 |
 | `pixvox mod F.py… --modid ID [--loader neoforge] --build` | projet de mod + `.jar` |
 | `pixvox view F.py --yaw 135 --pitch 20 [--persp 2] [--shading night] [--tick 6]` | angle libre |
 | `pixvox anim F.py` / `compare F.py…` / `ascii F.py --face north` | animation, variantes, pixels exacts |
@@ -125,7 +130,8 @@ ratée), `2` erreur d'utilisation ou d'environnement, `3` erreur interne.
 
 ## Limites
 
-- Java Edition uniquement (pas Bedrock) ; mods pour Minecraft 26.3 (versions dans `pixvox/mod.py`).
+- Java Edition uniquement (pas Bedrock) ; resource packs pour 1.21.4 → 26.3 ou 1.21.1, mods pour
+  Minecraft 26.3 (versions dans `pixvox/mod.py`).
 - Seules les textures s'animent (limite du jeu) ; pas de tintes de biome ni de textures connectées.
 - L'ombrage d'inventaire est une approximation fidèle, pas le rendu OpenGL du jeu.
 - pixvox ne lance jamais Minecraft : tester en jeu reste une étape humaine.

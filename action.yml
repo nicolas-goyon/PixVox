@@ -66,7 +66,7 @@ outputs:
     description: "Code de sortie : 0 réussi, 1 vérification échouée, 2 utilisation ou environnement, 3 erreur interne."
     value: ${{ steps.run.outputs.exit-code }}
   result:
-    description: "Chemin du résultat JSON (contrat pixvox.result/1, docs/cli.md)."
+    description: "Chemin du résultat JSON (contrat pixvox.result/2, docs/cli.md)."
     value: ${{ steps.run.outputs.result }}
   summary:
     description: "Chemin du résumé Markdown."

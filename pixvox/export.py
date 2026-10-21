@@ -8,6 +8,11 @@ Disposition produite (namespace `pixvox` par défaut) :
   assets/<ns>/blockstates/<nom>.json              pour un mod qui enregistre le bloc <ns>:<nom>
   assets/<ns>/items/<nom>.json                    définition d'item (1.21.4+) -> composant item_model
 
+Cible 1.21.1 (mc="1.21.1", NeoForge 21.1) : pas de dossier items/ mais models/item/<nom>.json (parent :
+le modèle du bloc), lumière des éléments en neoforge_data, render_type dès qu'une face a de la
+transparence (surcouche lumineuse comprise), rotations limitées à -45 … 45 par pas de 22,5°, et le
+papier (minecraft:paper) qui porte chaque modèle par custom_model_data pour les tests sans mod.
+
 Textures animées : bande verticale PNG + <texture>.png.mcmeta. Pour un modèle animé, les faces fixes
 vont dans l'atlas statique (#0), les faces qui changent dans un atlas animé (#1) ; les plans texturés
 (flammes…) ont chacun leur texture (#p0, #p1…).
@@ -22,6 +27,7 @@ import itertools
 import json
 import re
 import zipfile
+import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -55,6 +61,80 @@ PACK_MIN_FORMAT = 46     # 1.21.4 : dossier items/ + composant item_model
 PACK_MAX_FORMAT = 97     # 26.3 (format 97.1) — dernière version connue lors de l'écriture
 DATAPACK_MIN_FORMAT = 61  # 1.21.4 (data pack)
 DATAPACK_MAX_FORMAT = 121  # 26.3 (data pack ; à confirmer sur le wiki)
+
+
+# ============================================================================ version de Minecraft visée
+@dataclass(frozen=True)
+class Target:
+    """Version de Minecraft visée par l'export : formats et champs que ce jeu sait lire.
+
+    mc              identifiant (--mc) : "1.21.4+" (défaut, 1.21.4 → 26.3) ou "1.21.1" (NeoForge 21.1)
+    pack, data      formats (min, max) du resource pack et du datapack (pack.mcmeta)
+    item_models     True : définitions d'items (dossier items/, composant minecraft:item_model, 1.21.4+) ;
+                    False : modèles d'items (models/item/<nom>.json) et custom_model_data (1.21.1)
+    light           lumière d'un élément : "light_emission" (vanilla 1.21.2+) ou "neoforge_data" (NeoForge)
+    any_angle       rotation d'élément libre (1.21.11+ ; avant, simple avertissement) ; False : -45, -22,5,
+                    0, 22,5, 45 seulement, un autre angle refuse l'export
+    shade_override  écrit aussi shade_direction_override (26.3+ ; le jeu y ignore "shade")
+    layers          couche de rendu lue dans render_type (absent : solide), surcouche lumineuse comprise ;
+                    False : couche déduite des textures (26.x)
+    """
+    mc: str
+    label: str
+    pack: tuple
+    data: tuple
+    item_models: bool
+    light: str
+    any_angle: bool
+    shade_override: bool
+    layers: bool
+
+
+TARGETS = {
+    "1.21.4+": Target("1.21.4+", "Minecraft 1.21.4 → 26.3", (PACK_MIN_FORMAT, PACK_MAX_FORMAT),
+                      (DATAPACK_MIN_FORMAT, DATAPACK_MAX_FORMAT), True, "light_emission", True, True, False),
+    # vérifié dans le jar 1.21.1 (version.json, BlockElement) et les sources de NeoForge 21.1
+    "1.21.1": Target("1.21.1", "Minecraft 1.21.1 (NeoForge 21.1)", (34, 34), (48, 48), False, "neoforge_data",
+                     False, False, True),
+}
+DEFAULT_MC = "1.21.4+"
+CARRIER = "paper"        # 1.21.1 : item vanilla qui porte les modèles par custom_model_data (tests sans mod)
+CARRIER_MODEL = {"parent": "minecraft:item/generated", "textures": {"layer0": "minecraft:item/paper"}}
+
+
+def target(mc: str | None = None) -> Target:
+    """Cible d'export d'après son identifiant (None : la cible par défaut, 1.21.4 → 26.3)."""
+    if (mc or DEFAULT_MC) not in TARGETS:
+        raise ValueError(f"mc={mc!r} inconnu : {', '.join(TARGETS)}")
+    return TARGETS[mc or DEFAULT_MC]
+
+
+def adapt_model(model: dict, t: Target) -> dict:
+    """Modèle de bloc tel que la cible le lit : lumière des éléments en light_emission ou en neoforge_data
+    (lumière de bloc et de ciel, comme light_emission), shade_direction_override seulement en 26.3+."""
+    if t.light == "light_emission" and t.shade_override:
+        return model
+    elements = []
+    for el in model.get("elements", []):
+        e = {}
+        for k, v in el.items():
+            if k == "light_emission" and t.light == "neoforge_data":
+                if v:
+                    e["neoforge_data"] = {"block_light": int(v), "sky_light": int(v)}
+            elif k != "shade_direction_override" or t.shade_override:
+                e[k] = v
+        elements.append(e)
+    return {**model, "elements": elements}
+
+
+def pack_meta(description: str, formats: tuple) -> dict:
+    """Contenu de pack.mcmeta : une plage de formats (supported_formats, et min/max_format lus depuis
+    1.21.9), ou un seul format."""
+    lo, hi = formats
+    if lo == hi:
+        return {"pack": {"description": description, "pack_format": lo}}
+    return {"pack": {"description": description, "pack_format": lo, "supported_formats": [lo, hi],
+                     "min_format": lo, "max_format": hi}}
 
 
 def _zip_dir(root: Path, zip_path: Path) -> None:
@@ -581,17 +661,24 @@ def dumps(obj) -> str:
 
 
 class ResourcePack:
+    """Resource pack en cours d'écriture. mc : version de Minecraft visée ("1.21.4+" par défaut, ou
+    "1.21.1"), voir TARGETS ; min_format / max_format remplacent ceux de la cible."""
+
     def __init__(self, root, namespace: str = "pixvox", description: str = "Créé avec pixvox",
-                 min_format: int = PACK_MIN_FORMAT, max_format: int = PACK_MAX_FORMAT, mod_mode: bool = False):
+                 min_format: int | None = None, max_format: int | None = None, mod_mode: bool = False,
+                 mc: str | None = None):
         self.root = Path(root)
         self.ns = namespace
         self.description = description
-        self.min_format, self.max_format = min_format, max_format
+        self.target = target(mc)
+        self.min_format = self.target.pack[0] if min_format is None else min_format
+        self.max_format = self.target.pack[1] if max_format is None else max_format
         self.entries: list[dict] = []
         self.icon_img = None
         self.functions: dict = {}           # nom -> (lignes de placement, lignes de retrait)
         self.mod_mode = mod_mode            # ressources d'un mod : un bloc par multibloc (facing + part)
         self.multi_parts: dict = {}         # nom -> [(cellule, modèle)] dans l'ordre des parties
+        self.cmd: dict = {}                 # 1.21.1 : modèle -> custom_model_data du papier (tests sans mod)
 
     # -------------------------------------------------------------- écriture bas niveau
     def _p(self, *parts) -> Path:
@@ -629,16 +716,54 @@ class ResourcePack:
 
     def write_meta(self) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
-        meta = {"pack": {
-            "description": self.description,
-            "pack_format": self.min_format,
-            "supported_formats": [self.min_format, self.max_format],
-            "min_format": self.min_format,
-            "max_format": self.max_format,
-        }}
-        self._json(self.root / "pack.mcmeta", meta)
+        self._json(self.root / "pack.mcmeta", pack_meta(self.description, (self.min_format, self.max_format)))
         if self.icon_img is not None:
             Image.fromarray(self.icon_img).save(self.root / "pack.png")
+
+    def _write_model(self, path: Path, model: dict) -> None:
+        """Modèle de bloc, dans les champs que lit la version visée (relu tel quel par la vérification)."""
+        self._json(path, adapt_model(model, self.target))
+
+    def _item(self, ns: str, name: str, model_ref: str) -> None:
+        """Ce qui affiche model_ref comme item <ns>:<name> : définition d'item (items/, 1.21.4+) ou modèle
+        d'item (models/item/, 1.21.1 ; un item plat y a déjà son modèle item/generated)."""
+        if self.target.item_models:
+            self._json(self._p(ns, "items", f"{name}.json"), {"model": {"type": "minecraft:model", "model": model_ref}})
+        elif model_ref != f"{ns}:item/{name}":
+            self._json(self._p(ns, "models", "item", f"{name}.json"), {"parent": model_ref})
+
+    def _cmd(self, model_ref: str) -> int:
+        """1.21.1 : custom_model_data qui affiche model_ref sur le papier. Tiré du nom (stable d'un export à
+        l'autre : les objets déjà posés en jeu gardent leur modèle), < 2^24 (le prédicat est un float)."""
+        if model_ref not in self.cmd:
+            n = 100_000 + zlib.crc32(model_ref.encode("utf-8")) % 900_000
+            while n in self.cmd.values():
+                n += 1
+            self.cmd[model_ref] = n
+        return self.cmd[model_ref]
+
+    def _display_item(self, item_id: str, model_ref: str) -> str:
+        """Item (NBT de commande) qui montre ce modèle sans mod : composant item_model (1.21.4+) ou
+        papier + custom_model_data (1.21.1)."""
+        if self.target.item_models:
+            return f'{{id:"minecraft:stone",count:1,components:{{"minecraft:item_model":"{item_id}"}}}}'
+        return f'{{id:"minecraft:{CARRIER}",count:1,components:{{"minecraft:custom_model_data":{self._cmd(model_ref)}}}}}'
+
+    def _give(self, item_id: str, model_ref: str, base: str = "stone") -> str:
+        if self.target.item_models:
+            return f"/give @s minecraft:{base}[minecraft:item_model=\"{item_id}\"]"
+        return f"/give @s minecraft:{CARRIER}[minecraft:custom_model_data={self._cmd(model_ref)}]"
+
+    def write_carrier(self) -> None:
+        """1.21.1 : modèle du papier avec un override custom_model_data par modèle exporté (par ordre
+        croissant : le dernier prédicat vérifié l'emporte). Garde un remplacement --replace du papier."""
+        if self.target.item_models or self.mod_mode or not self.cmd:
+            return
+        path = self._p("minecraft", "models", "item", f"{CARRIER}.json")
+        model = json.loads(path.read_text(encoding="utf-8")) if path.exists() else dict(CARRIER_MODEL)
+        model["overrides"] = [{"predicate": {"custom_model_data": n}, "model": ref}
+                              for ref, n in sorted(self.cmd.items(), key=lambda kv: kv[1])]
+        self._json(path, model)
 
     # -------------------------------------------------------------- assets
     def add(self, asset, replace: str | None = None) -> dict:
@@ -654,6 +779,8 @@ class ResourcePack:
             raise TypeError(f"asset inconnu : {asset!r}")
         if replace:
             info["replace"] = self._replace_vanilla(asset, replace, info)
+        if not self.target.item_models and not self.mod_mode:
+            info["custom_model_data"] = self._cmd(info["model"])     # 1.21.1 : /give du papier, sans mod
         self.entries.append(info)
         return info
 
@@ -671,8 +798,14 @@ class ResourcePack:
 
     def _block_common(self, name: str, model_ref: str, states: str | None = None) -> None:
         self._json(self._p(self.ns, "blockstates", f"{name}.json"), self.variants(model_ref, states))
-        self._json(self._p(self.ns, "items", f"{name}.json"),
-                   {"model": {"type": "minecraft:model", "model": model_ref}})
+        self._item(self.ns, name, model_ref)
+
+    def _light_warnings(self, what: str, n: int = 1) -> list:
+        """1.21.1 : la lumière des éléments n'a pas d'équivalent vanilla, seul NeoForge la lit."""
+        if not n or self.target.light != "neoforge_data":
+            return []
+        return [f"{what} : lumière écrite en neoforge_data, lue par NeoForge seulement ; vanilla et Fabric 1.21.1 "
+                "l'ignorent (pas de lueur, rien d'autre ne change)"]
 
     def _add_block(self, b: Block) -> dict:
         f2s, textures = cube_textures(b)
@@ -683,15 +816,19 @@ class ResourcePack:
             self._texture("block", f"{b.name}_glow{suf}", t)
         model = cube_model_json(self.ns, b.name, f2s, g2s, b.emission)
         warnings = []
-        if glow:
+        rt = b.effective_render_type()
+        if glow and self.target.layers and rt == "solid":
+            rt = "cutout"                                # 1.21.1 : la surcouche n'est découpée qu'en cutout
+        if glow and self.target.light == "neoforge_data":
+            warnings += self._light_warnings("surcouche lumineuse")
+        elif glow:
             warnings.append("surcouche lumineuse : rendu correct en 26.x (couche déduite des textures) ; avant 26.x il "
                             "faut un bloc en rendu cutout (mod, ou --replace sur un bloc cutout comme minecraft:glass), "
                             "sinon la face entière paraît pleinement éclairée")
-        rt = b.effective_render_type()
         if rt != "solid":
             model["render_type"] = f"minecraft:{rt}"     # NeoForge ≤ 1.21.x ; en 26.x déduit des textures
         ref = f"{self.ns}:block/{b.name}"
-        self._json(self._p(self.ns, "models", "block", f"{b.name}.json"), model)
+        self._write_model(self._p(self.ns, "models", "block", f"{b.name}.json"), model)
         self._block_common(b.name, ref, b.states)
         diff = self._verify_ticks(ref, b, b.quads)
         self._icon_from(b.quads(0))
@@ -725,6 +862,12 @@ class ResourcePack:
                 plane_tex[var] = pl.texture
             elements.append(plane_element(pl, plane_vars[k]))
         check_bounds(m.name, elements)                  # avant d'écrire quoi que ce soit
+        odd = sorted({round(pl.norm_angle(), 3) for pl in m.planes
+                      if abs(pl.norm_angle() / 22.5 - round(pl.norm_angle() / 22.5)) > 1e-6})
+        if odd and not self.target.any_angle:
+            raise ExportError(f"{m.name} : plans à {odd}° — {self.target.label} n'accepte que des rotations de "
+                              "-45, -22,5, 0, 22,5 ou 45° et refuserait ce modèle ; choisir des angles multiples de "
+                              "22,5°")
         tex = {}
         if opt.atlas is not None:
             tex["0"] = self._texture("block", m.name, opt.atlas)
@@ -734,11 +877,11 @@ class ResourcePack:
             tex[var] = self._texture("block", f"{m.name}_{var}", t)
         tex["particle"] = tex.get("0") or tex.get("1") or next(iter(tex.values()))
         warnings = []
-        odd = sorted({round(pl.norm_angle(), 3) for pl in m.planes
-                      if abs(pl.norm_angle() / 22.5 - round(pl.norm_angle() / 22.5)) > 1e-6})
         if odd:
             warnings.append(f"plans à {odd}° : ce modèle ne chargera qu'à partir de 1.21.11 (avant : multiples de "
                             "22,5° seulement) alors que le pack annonce 1.21.4+")
+        n_light = sum(1 for e in elements if e.get("light_emission"))
+        warnings += self._light_warnings(f"{n_light} élément(s) lumineux", n_light)
         model = {"parent": "minecraft:block/block", "textures": tex, "elements": elements}
         if not m.ambient_occlusion:
             model["ambientocclusion"] = False
@@ -755,7 +898,7 @@ class ResourcePack:
         if rt != "solid":
             model["render_type"] = f"minecraft:{rt}"
         ref = f"{self.ns}:block/{m.name}"
-        self._json(self._p(self.ns, "models", "block", f"{m.name}.json"), model)
+        self._write_model(self._p(self.ns, "models", "block", f"{m.name}.json"), model)
         self._block_common(m.name, ref, m.states)
         diff = self._verify_ticks(ref, m, m.quads)
         self._icon_from(m.quads(0))
@@ -778,6 +921,13 @@ class ResourcePack:
         base = {"parent": "minecraft:block/block", "textures": tex}
         if not mb.ambient_occlusion:
             base["ambientocclusion"] = False
+        rt = rt_mini = "solid"
+        if self.target.layers:                           # 1.21.1 : render_type, sinon tout est opaque
+            rt = self._alpha_kind([np.stack([f.data for f in mb.frames])[:, mb.volume.m_surface()]])
+            mm = opt.mini_model
+            rt_mini = self._alpha_kind([np.stack([f.data for f in mm.frames])[:, mm.volume.m_surface()]])
+            if rt != "solid":
+                base["render_type"] = f"minecraft:{rt}"
         nx, ny, nz = mb.blocks
         ax, az = nx // 2, nz // 2
         place = [f"# {mb.name} : {nx} x {ny} x {nz} blocs, {len(opt.elements)} parties. Posé centré sur le bloc "
@@ -788,15 +938,16 @@ class ResourcePack:
         for (bx, by, bz), els in sorted(opt.elements.items()):
             pid = f"{mb.name}_{bx}_{by}_{bz}"
             ref = f"{self.ns}:block/{mb.name}/{bx}_{by}_{bz}"
-            self._json(self._p(self.ns, "models", "block", mb.name, f"{bx}_{by}_{bz}.json"), {**base, "elements": els})
+            self._write_model(self._p(self.ns, "models", "block", mb.name, f"{bx}_{by}_{bz}.json"),
+                              {**base, "elements": els})
             if not self.mod_mode:
                 self._block_common(pid, ref)
             parts.append(((bx, by, bz), ref))
             loader_refs.append((ref, (bx * 16, by * 16, bz * 16)))
-            place.append(f"execute align xyz run summon minecraft:item_display ~{bx - ax + 0.5:g} ~{by + 0.5:g} "
-                         f"~{bz - az + 0.5:g} {{Rotation:[180f,0f],item:{{id:\"minecraft:stone\",count:1,"
-                         f"components:{{\"minecraft:item_model\":\"{self.ns}:{pid}\"}}}},"
-                         f"Tags:[\"pixvox\",\"pixvox.{mb.name}\"]}}")
+            if not self.mod_mode:
+                place.append(f"execute align xyz run summon minecraft:item_display ~{bx - ax + 0.5:g} ~{by + 0.5:g} "
+                             f"~{bz - az + 0.5:g} {{Rotation:[180f,0f],item:{self._display_item(f'{self.ns}:{pid}', ref)},"
+                             f"Tags:[\"pixvox\",\"pixvox.{mb.name}\"]}}")
         remove = [f"kill @e[type=minecraft:item_display,tag=pixvox.{mb.name},distance=..{2 * max(mb.blocks) + 2}]"]
         self.multi_parts[mb.name] = parts
         if not self.mod_mode:
@@ -808,13 +959,15 @@ class ResourcePack:
         if opt.miniature.anim_atlas is not None:
             mtex["1"] = self._texture("block", f"{mb.name}_mini_anim", opt.miniature.anim_atlas, mb.timing)
         mtex["particle"] = mtex.get("0") or mtex.get("1")
-        self._json(self._p(self.ns, "models", "block", f"{mb.name}.json"),
-                   {"parent": "minecraft:block/block", "textures": mtex, "elements": opt.miniature.elements})
-        self._json(self._p(self.ns, "items", f"{mb.name}.json"), {"model": {"type": "minecraft:model", "model": mref}})
+        mini = {"parent": "minecraft:block/block", "textures": mtex, "elements": opt.miniature.elements}
+        if rt_mini != "solid":
+            mini["render_type"] = f"minecraft:{rt_mini}"
+        self._write_model(self._p(self.ns, "models", "block", f"{mb.name}.json"), mini)
+        self._item(self.ns, mb.name, mref)
 
         # vérification : toutes les parties relues sur disque et remises en place == volume (chaque image)
         def parts_from_disk(tick):
-            loader = ModelLoader([self.root], tick=tick)
+            loader = ModelLoader([self.root], tick=tick, mc=self.target.mc)
             q = []
             for ref, off in loader_refs:
                 q += loader.quads(ref, offset=off)
@@ -826,10 +979,17 @@ class ResourcePack:
         diff["views"] += dmini["views"]
         diff["missing"] = sorted(set(diff["missing"]) | set(dmini["missing"]))
         self._icon_from(mb.quads(0))
-        return {"name": mb.name, "kind": "multibloc", "model": mref, "parts": len(opt.elements),
+        info = {"name": mb.name, "kind": "multibloc", "model": mref, "parts": len(opt.elements),
                 "elements": opt.stats["elements_total"], "elements_max": opt.stats["elements_max"],
                 "texture_size": opt.stats["texture"], "blocks": mb.blocks, "verify": diff,
                 "animated": int(opt.anim_atlas is not None)}
+        if self.target.layers:
+            info["render_type"] = rt
+        n_light = opt.stats["emissive_elements"]
+        warnings = self._light_warnings(f"{n_light} élément(s) lumineux", n_light)
+        if warnings:                                     # clé absente sinon (résultat de la cible par défaut inchangé)
+            info["warnings"] = warnings
+        return info
 
     def _add_item(self, it: Item) -> dict:
         src = it.anim if it.anim is not None else it.sprite
@@ -837,12 +997,11 @@ class ResourcePack:
         ref = f"{self.ns}:item/{it.name}"
         self._json(self._p(self.ns, "models", "item", f"{it.name}.json"),
                    {"parent": "minecraft:item/generated", "textures": {"layer0": ref}})
-        self._json(self._p(self.ns, "items", f"{it.name}.json"),
-                   {"model": {"type": "minecraft:model", "model": ref}})
+        self._item(self.ns, it.name, ref)
         diff = 0
         ticks = asset_ticks(it, 64)
         for t in ticks:                               # chaque image relue sur disque == image voulue
-            loader = ModelLoader([self.root], tick=t)
+            loader = ModelLoader([self.root], tick=t, mc=self.target.mc)
             back = loader.texture(ref)
             diff += int((np.abs(back.astype(int) - it.sprite_at(t).astype(int)).max(-1) > 0).sum())
         if self.icon_img is None:
@@ -859,12 +1018,10 @@ class ResourcePack:
                               "utiliser le datapack de placement, ou un mod (python -m pixvox mod …)")
         t = target.split(":", 1)[-1]
         if isinstance(asset, Item):
-            self._json(self._p("minecraft", "items", f"{t}.json"),
-                       {"model": {"type": "minecraft:model", "model": info["model"]}})
+            self._item("minecraft", t, info["model"])
             return f"item minecraft:{t} -> {info['model']}"
         self._json(self._p("minecraft", "blockstates", f"{t}.json"), self.variants(info["model"], asset.states))
-        self._json(self._p("minecraft", "items", f"{t}.json"),
-                   {"model": {"type": "minecraft:model", "model": info["model"]}})
+        self._item("minecraft", t, info["model"])
         return f"bloc + item minecraft:{t} -> {info['model']}"
 
     def _icon_from(self, vol) -> None:
@@ -876,68 +1033,89 @@ class ResourcePack:
     # -------------------------------------------------------------- vérification
     def verify(self, model_ref: str | None, vol, offset=(0, 0, 0), voxel_size: float = 1.0,
                views=(INVENTORY, BACK, (135, 25), (315, -40), (0, 89.9), (90, 0)), quads=None,
-               tick: float = 0) -> dict:
+               tick: float = 0, night=()) -> dict:
         """Relit le modèle et les PNG écrits sur disque (image affichée au tick `tick` pour une texture
-        animée), les rend comme Minecraft, et compare au rendu de référence (le volume, ou une liste de
-        quads) sous plusieurs angles. 0 pixel différent = export fidèle."""
-        loader = ModelLoader([self.root], tick=tick)
+        animée) comme la version visée les lit, les rend comme Minecraft, et compare au rendu de référence
+        (le volume, ou une liste de quads) sous plusieurs angles en couleurs brutes, puis de nuit sous les
+        angles `night` (shading 'emission' : lumière des éléments, ombrage oui/non, couche de rendu d'une
+        surcouche). 0 pixel différent = export fidèle."""
+        loader = ModelLoader([self.root], tick=tick, mc=self.target.mc)
         qm = quads if quads is not None else loader.quads(model_ref)
         qv = vol if isinstance(vol, list) else quads_from_volume(vol, offset=offset, voxel_size=voxel_size)
         total = 0
-        for view in views:
+        for view, shading in [(v, "flat") for v in views] + [(v, "emission") for v in night]:
             cam = fit_camera(qv, view, 256, 256, jitter=(0.313, 0.227))
-            a = render(qv, cam, shading="flat")
-            b = render(qm, cam, shading="flat")
+            a = render(qv, cam, shading=shading)
+            b = render(qm, cam, shading=shading)
             n, _ = compare(a, b)
             total += n
-        return {"diff_px": total, "views": len(views), "missing": sorted(set(loader.missing))}
+        return {"diff_px": total, "views": len(views) + len(night), "missing": sorted(set(loader.missing))}
 
     def _verify_ticks(self, model_ref, asset, ref_quads, disk_quads=None, max_ticks: int = 16) -> dict:
-        """verify() à chaque début d'image des animations de l'asset (6 vues au tick 0, 3 ensuite)."""
+        """verify() à chaque début d'image des animations de l'asset (6 vues + 2 de nuit au tick 0, 3 vues
+        ensuite : la lumière et l'ombrage ne changent pas d'une image à l'autre)."""
         ticks = asset_ticks(asset, max_ticks)
         out = {"diff_px": 0, "views": 0, "missing": [], "ticks": len(ticks)}
         for k, t in enumerate(ticks):
             views = (INVENTORY, BACK, (135, 25), (315, -40), (0, 89.9), (90, 0)) if k == 0 else \
                 (INVENTORY, BACK, (135, 25))
             d = self.verify(model_ref, ref_quads(t), views=views, tick=t,
-                            quads=disk_quads(t) if disk_quads else None)
+                            quads=disk_quads(t) if disk_quads else None, night=(INVENTORY, BACK) if k == 0 else ())
             out["diff_px"] += d["diff_px"]
             out["views"] += d["views"]
             out["missing"] = sorted(set(out["missing"]) | set(d["missing"]))
         return out
 
     # -------------------------------------------------------------- finalisation
-    def finish(self, zip_path=None) -> Path | None:
-        self.write_meta()
-        lines = [
-            "Pack généré par pixvox", "",
-            f"Formats : min {self.min_format} (1.21.4) -> max {self.max_format} (26.3). Pour une version plus",
-            "récente, augmentez max_format / supported_formats dans pack.mcmeta.", "",
-            "Tester en jeu SANS mod (1.21.4+) :",
-        ]
+    def _readme(self) -> list:
+        """Mode d'emploi du pack (README_pixvox.txt) : formats, commandes de test sans mod, remplacements."""
+        legacy = not self.target.item_models
+        if legacy:
+            lines = [f"Pack généré par pixvox pour {self.target.label}", "",
+                     f"Format : {self.min_format} (1.21 – 1.21.1). Lumière des éléments en neoforge_data et couche de",
+                     "rendu en render_type : lues par NeoForge ; vanilla et Fabric les ignorent (pas de lueur ; sous",
+                     "Fabric, déclarer la couche de rendu dans le mod).", "",
+                     "Tester en jeu SANS mod (1.21.1) : chaque modèle est porté par le papier (custom_model_data,",
+                     f"overrides de assets/minecraft/models/item/{CARRIER}.json) :"]
+        else:
+            lines = ["Pack généré par pixvox", "",
+                     f"Formats : min {self.min_format} (1.21.4) -> max {self.max_format} (26.3). Pour une version plus",
+                     "récente, augmentez max_format / supported_formats dans pack.mcmeta.", "",
+                     "Tester en jeu SANS mod (1.21.4+) :"]
         for e in self.entries:
-            n = e["name"]
+            n, ref, item_id = e["name"], e["model"], f"{self.ns}:{e['name']}"
+            label = f"   ({n})" if legacy else ""
             if e["kind"] == "item":
-                lines.append(f"  /give @s minecraft:paper[minecraft:item_model=\"{self.ns}:{n}\"]")
+                lines.append(f"  {self._give(item_id, ref, 'paper')}{label}")
             elif e["kind"] == "multibloc":
-                lines.append(f"  /give @s minecraft:stone[minecraft:item_model=\"{self.ns}:{n}\"]   (miniature)")
+                lines.append(f"  {self._give(item_id, ref)}   ({n + ', ' if legacy else ''}miniature)")
                 lines.append(f"  objet entier : datapack, puis /function {self.ns}:place/{n}  "
                              f"(retirer : /function {self.ns}:remove/{n})")
             else:
-                lines.append(f"  /give @s minecraft:stone[minecraft:item_model=\"{self.ns}:{n}\"]")
+                lines.append(f"  {self._give(item_id, ref)}{label}")
                 lines.append("  posé dans le monde (affichage seulement) :")
                 lines.append(f"  /execute align xyz run summon minecraft:item_display ~0.5 ~0.5 ~0.5 "
-                             f"{{Rotation:[180f,0f],item:{{id:\"minecraft:stone\",count:1,components:"
-                             f"{{\"minecraft:item_model\":\"{self.ns}:{n}\"}}}}}}")
+                             f"{{Rotation:[180f,0f],item:{self._display_item(item_id, ref)}}}")
             if "replace" in e:
                 lines.append(f"  (remplacement vanilla actif : {e['replace']})")
         lines += ["", "Remplacer un bloc vanilla (test rapide, blocs SANS propriétés : stone, dirt, iron_ore…) :",
-                  "  python -m pixvox export mon_asset.py --replace nom_asset=minecraft:stone",
+                  "  python -m pixvox export mon_asset.py --replace nom_asset=minecraft:stone"
+                  + (" --mc 1.21.1" if legacy else ""),
                   "  (objet lumineux ou à transparence : --replace nom_asset=minecraft:torch — lumière 14, cutout)",
-                  "", "Textures animées : chaque bande PNG a son .png.mcmeta (frametime en ticks, 20 = 1 s).",
-                  "", "Vrais blocs (collision, lumière, particules, multiblocs posables) : générer un mod",
-                  "  python -m pixvox mod mes_assets.py --modid mon_mod --loader fabric|neoforge --build"]
+                  "", "Textures animées : chaque bande PNG a son .png.mcmeta (frametime en ticks, 20 = 1 s).", ""]
+        if legacy:
+            lines += ["Vrais blocs (collision, lumière, particules) : un mod NeoForge 1.21.1 qui reprend assets/"
+                      f"{self.ns}/", "  (modèles, textures, blockstates, models/item) ; `pixvox mod` produit des mods 26.3."]
+        else:
+            lines += ["Vrais blocs (collision, lumière, particules, multiblocs posables) : générer un mod",
+                      "  python -m pixvox mod mes_assets.py --modid mon_mod --loader fabric|neoforge --build"]
         lines += ["", "Rotation:[180f,0f] : depuis 1.20 les item_display tournent le modèle de 180° ; on compense."]
+        return lines
+
+    def finish(self, zip_path=None) -> Path | None:
+        self.write_meta()
+        lines = self._readme()
+        self.write_carrier()
         dp = self.write_datapack()
         self.datapack, self.datapack_zip = dp, None
         if dp:
@@ -961,10 +1139,7 @@ class ResourcePack:
         mark_output_dir(dp)
         (dp / "data" / self.ns / "function" / "place").mkdir(parents=True)
         (dp / "data" / self.ns / "function" / "remove").mkdir(parents=True)
-        meta = {"pack": {"description": f"{self.description} — placement des objets multiblocs",
-                         "pack_format": DATAPACK_MIN_FORMAT,
-                         "supported_formats": [DATAPACK_MIN_FORMAT, DATAPACK_MAX_FORMAT],
-                         "min_format": DATAPACK_MIN_FORMAT, "max_format": DATAPACK_MAX_FORMAT}}
+        meta = pack_meta(f"{self.description} — placement des objets multiblocs", self.target.data)
         (dp / "pack.mcmeta").write_text(dumps(meta) + "\n", encoding="utf-8")
         for name, (place, remove) in self.functions.items():
             (dp / "data" / self.ns / "function" / "place" / f"{name}.mcfunction").write_text(
@@ -1009,18 +1184,20 @@ def export_line(info: dict) -> str:
 
 
 def export_assets(assets, root="out/pack", namespace: str = "pixvox", zip_path=None, replace=None,
-                  description: str = "Créé avec pixvox", log=say) -> dict:
+                  description: str = "Créé avec pixvox", log=say, mc: str | None = None) -> dict:
     """Écrit un resource pack (recréé) et vérifie chaque asset par re-rendu, sans s'arrêter au premier refus.
 
-    Retourne {"pack", "zip", "datapack", "datapack_zip", "infos": [...], "refused": [(nom, message)]}.
+    mc : version de Minecraft visée, "1.21.4+" (défaut : 1.21.4 → 26.3) ou "1.21.1" (NeoForge 21.1).
+    Retourne {"pack", "zip", "datapack", "datapack_zip", "mc", "infos": [...], "refused": [(nom, message)]}.
     log(ligne) reçoit le journal lisible (affiché par défaut ; None pour se taire).
     """
     log = log or (lambda *_: None)
     if not NAMESPACE_RE.fullmatch(namespace or ""):
         raise ExportError(f"namespace {namespace!r} invalide : minuscules, chiffres, _ . - (Minecraft refuse le reste)")
+    t = target(mc)                                   # ValueError si inconnu, avant de toucher au disque
     root = prepare_output_dir(root, "dossier du pack")
     mark_output_dir(root)
-    pack = ResourcePack(root, namespace, description)
+    pack = ResourcePack(root, namespace, description, mc=t.mc)
     infos, refused = [], []
     for a in assets:
         try:
@@ -1033,7 +1210,7 @@ def export_assets(assets, root="out/pack", namespace: str = "pixvox", zip_path=N
         log(f"[export] {export_line(i)}")
         for w in i.get("warnings", []):
             log(f"[export]   ATTENTION {i['name']} : {w}")
-    log(f"[export] pack : {root}" + (f" | zip : {z}" if z else ""))
-    return {"pack": root, "zip": z, "datapack": pack.datapack, "datapack_zip": pack.datapack_zip,
+    log(f"[export] pack : {root}" + (f" | zip : {z}" if z else "") + ("" if t.mc == DEFAULT_MC else f" | {t.label}"))
+    return {"pack": root, "zip": z, "datapack": pack.datapack, "datapack_zip": pack.datapack_zip, "mc": t.mc,
             "infos": infos, "refused": refused}
 

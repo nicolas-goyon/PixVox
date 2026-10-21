@@ -63,10 +63,18 @@ def test_json_contract_and_exit_codes():
         good = _write(tmp, "good.py", ASSETS)
         code, d = _cli("export", good, "--pack", str(tmp / "pack"), cwd=tmp)
         assert code == EXIT_OK and d["ok"] and d["schema"] == SCHEMA and d["command"] == "export"
+        assert d["mc"] == "1.21.4+" and (tmp / "pack/assets/pixvox/items/blk.json").exists()
         a = {x["name"]: x for x in d["assets"]}
         assert a["blk"]["kind"] == "block" and a["peb"]["kind"] == "model" and a["itm"]["kind"] == "item"
         assert a["blk"]["verify"]["diff_px"] == 0 and a["blk"]["model"] == "pixvox:block/blk"
         assert d["pack"].endswith("pack") and d["refused"] == [] and d["errors"] == []
+        # cible 1.21.1 : même contrat, champ mc, fichiers relus et vérifiés comme 1.21.1
+        code, d = _cli("export", good, "--pack", str(tmp / "p121"), "--mc", "1.21.1", cwd=tmp)
+        assert code == EXIT_OK and d["mc"] == "1.21.1" and all(x["verified"] for x in d["assets"]), d["errors"]
+        assert not (tmp / "p121/assets/pixvox/items").exists()
+        assert (tmp / "p121/assets/pixvox/models/item/blk.json").exists()
+        code, d = _cli("export", good, "--mc", "1.20.1", cwd=tmp)
+        assert code == EXIT_USAGE and d["errors"][0]["type"] == "usage" and "1.21.1" in d["errors"][0]["message"]
         # modèle refusé par le jeu (48 unités de haut > 32) : code 1, les autres sont exportés
         tall = _write(tmp, "tall.py", "from pixvox import *\ndef build():\n"
                                       "    return [Model('tall', Volume(6, 48, 6, fill='#888888')), "
@@ -184,6 +192,9 @@ def test_contract_edge_cases():
         assert run(["summary", str(lst), "--json"])[0] == EXIT_USAGE
         code, d = run(["export", f, "--pack", str(tmp / "p2"), "--json"])
         assert all("ticks" in a["verify"] for a in d["assets"]), d["assets"]
+        from pixvox.cli import MC_TARGETS
+        from pixvox.export import DEFAULT_MC, TARGETS
+        assert MC_TARGETS == tuple(TARGETS) and MC_TARGETS[0] == DEFAULT_MC     # --mc sans importer numpy
 
 
 def test_say_survives_a_closed_reader():
