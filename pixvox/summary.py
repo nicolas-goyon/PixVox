@@ -64,7 +64,8 @@ def to_markdown(data: dict) -> str:
     lines = [f"### pixvox {cmd} — {_status(data)}", ""]
     if cmd == "export":
         lines.append(f"Pack {_code(data.get('pack'))} · zip {_code(data.get('zip'))} · datapack "
-                     f"{_code(data.get('datapack'))} · namespace `{data.get('namespace')}`")
+                     f"{_code(data.get('datapack'))} · namespace `{data.get('namespace')}`"
+                     + (f" · Minecraft `{data['mc']}`" if data.get("mc") else ""))
         lines += [""] + _assets_table(data.get("assets", []))
     elif cmd == "mod":
         b = data.get("build") or {}

@@ -66,7 +66,7 @@ def main() -> int:
     try:
         extra = shlex.split(os.environ.get("PIXVOX_ARGS", ""))
     except ValueError as e:                        # guillemet non fermé…
-        code, doc = 2, {"schema": "pixvox.result/1", "command": cmd, "ok": False, "exit_code": 2,
+        code, doc = 2, {"schema": "pixvox.result/2", "command": cmd, "ok": False, "exit_code": 2,
                         "errors": [{"type": "usage", "message": f"entrée args illisible : {e}"}], "warnings": []}
         print(f"::error title=pixvox::entrée args illisible ({e})")
     else:
@@ -77,7 +77,7 @@ def main() -> int:
         try:
             doc = json.loads(r.stdout)
         except ValueError:
-            doc = {"schema": "pixvox.result/1", "command": cmd, "ok": False, "exit_code": code,
+            doc = {"schema": "pixvox.result/2", "command": cmd, "ok": False, "exit_code": code,
                    "errors": [{"type": "internal", "message": "sortie non JSON : " + r.stdout[-500:]}], "warnings": []}
     out.mkdir(parents=True, exist_ok=True)         # après pixvox : `--pack out` ne l'efface pas
     result.write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")

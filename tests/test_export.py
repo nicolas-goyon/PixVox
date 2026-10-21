@@ -5,7 +5,7 @@ from PIL import Image
 
 from pixvox import Anim, Block, Item, Model, MultiBlock, Sprite, Volume, export_pack, fire, flow, ramp
 from pixvox.assets import Plane
-from pixvox.export import ExportError, ResourcePack, optimize_model, plane_element
+from pixvox.export import ExportError, ResourcePack, export_assets, optimize_model, plane_element, verified
 from pixvox.mcmodel import ModelLoader
 from pixvox.render import plane_quads, quads_from_volume
 from testkit import animated_model, design_shape, diff, marked_volume, pillar_volume, tmpdir
@@ -189,6 +189,91 @@ def test_emissive_block_and_multiblock_export():
         assert info["verify"]["diff_px"] == 0
         part = json.loads((tmp / "pack/assets/pixvox/models/block/lamp_post/0_1_0.json").read_text(encoding="utf-8"))
         assert any(e.get("light_emission") == 14 for e in part["elements"])
+
+
+def _read(p):
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
+def test_export_for_minecraft_1_21_1():
+    """Cible 1.21.1 (NeoForge 21.1) : seules des clés que ce jeu connaît, pas de dossier items/, et la
+    vérification relit ces fichiers comme 1.21.1 (neoforge_data, render_type, vues de nuit)."""
+    v = Volume(16)
+    v.noise(ramp("#5a5c63", 4), cells=3, seed=1)
+    ore = Block("glow_ore", v, emissive=v.blobs(ramp("#3cc8bb", 5), count=4, seed=2, on_edges=1), emission=11)
+    sp = Sprite(16)
+    sp.rect(4, 4, 11, 11, "#ff8800")
+    mv = Volume(16, 32, 16)
+    mv.set(mv.m_box(4, 0, 4, 11, 30, 11), "#777777")
+    core = mv.m_box(6, 20, 3, 9, 26, 12)
+    mv.set(core, "#ffcc33")
+    lamp = MultiBlock("lamp_post", mv, emissive=core, emission=14)
+    with tmpdir() as tmp:
+        root = tmp / "pack"
+        res = export_assets([ore, animated_model(), Item("item_test", sp), lamp], root, mc="1.21.1", log=None,
+                            replace={"glow_ore": "minecraft:stone", "item_test": "minecraft:paper"})
+        assert res["mc"] == "1.21.1" and not res["refused"]
+        assert all(verified(i) for i in res["infos"]), [i["verify"] for i in res["infos"]]
+        assert _read(root / "pack.mcmeta") == {"pack": {"description": "Créé avec pixvox", "pack_format": 34}}
+        assert not [p for p in root.rglob("items") if p.is_dir()]               # dossier des versions 1.21.4+
+        known = {"from", "to", "rotation", "faces", "shade", "neoforge_data"}   # BlockElement 1.21.1 + NeoForge
+        for p in (root / "assets/pixvox/models/block").rglob("*.json"):
+            m = _read(p)
+            assert set(m) <= {"parent", "textures", "elements", "display", "ambientocclusion", "render_type"}, p
+            for e in m["elements"]:
+                assert set(e) <= known, (p.name, set(e) - known)
+                assert e.get("rotation", {}).get("angle", 0) in (-45, -22.5, 0, 22.5, 45), p.name
+                if "neoforge_data" in e:                                         # comme light_emission
+                    assert e["neoforge_data"]["block_light"] == e["neoforge_data"]["sky_light"] > 0
+        model = _read(root / "assets/pixvox/models/block/glow_ore.json")
+        assert model["render_type"] == "minecraft:cutout"                       # surcouche lumineuse découpée
+        assert model["elements"][1]["neoforge_data"] == {"block_light": 11, "sky_light": 11}
+        assert _read(root / "assets/pixvox/models/block/anim_test.json")["render_type"] == "minecraft:cutout"
+        assert any("neoforge_data" in e for e in _read(root / "assets/pixvox/models/block/lamp_post/0_1_0.json")
+                   ["elements"])
+        items = root / "assets/pixvox/models/item"
+        assert _read(items / "glow_ore.json") == {"parent": "pixvox:block/glow_ore"}
+        assert _read(items / "lamp_post_0_0_0.json") == {"parent": "pixvox:block/lamp_post/0_0_0"}
+        assert _read(items / "item_test.json")["parent"] == "minecraft:item/generated"
+        # tests sans mod : --replace et papier porteur (custom_model_data par ordre croissant)
+        assert _read(root / "assets/minecraft/models/item/stone.json") == {"parent": "pixvox:block/glow_ore"}
+        assert (root / "assets/minecraft/blockstates/stone.json").exists()
+        paper = _read(root / "assets/minecraft/models/item/paper.json")
+        assert paper["parent"] == "pixvox:item/item_test"                       # --replace du papier gardé
+        cmds = [o["predicate"]["custom_model_data"] for o in paper["overrides"]]
+        assert cmds == sorted(set(cmds)) and max(cmds) < 2 ** 24
+        assert {i["model"] for i in res["infos"]} <= {o["model"] for o in paper["overrides"]}
+        assert {i["custom_model_data"] for i in res["infos"]} <= set(cmds)
+        dp = tmp / "pack_datapack"
+        assert _read(dp / "pack.mcmeta")["pack"]["pack_format"] == 48
+        place = (dp / "data/pixvox/function/place/lamp_post.mcfunction").read_text(encoding="utf-8")
+        assert "minecraft:custom_model_data" in place and "item_model" not in place
+        readme = (root / "README_pixvox.txt").read_text(encoding="utf-8")
+        assert "custom_model_data" in readme and "item_model" not in readme
+        # la vérification lit comme 1.21.1 : sans render_type (couche solide), toute la surcouche brille la
+        # nuit ; sans neoforge_data, ou avec light_emission (inconnu en 1.21.1), plus de lueur
+        p = root / "assets/pixvox/models/block/glow_ore.json"
+        lit = model["elements"][1]
+        unlit = {k: val for k, val in lit.items() if k != "neoforge_data"}
+        for broken in ({k: val for k, val in model.items() if k != "render_type"},
+                       {**model, "elements": [model["elements"][0], unlit]},
+                       {**model, "elements": [model["elements"][0], {**unlit, "light_emission": 11}]}):
+            p.write_text(json.dumps(broken), encoding="utf-8")
+            bad = ResourcePack(root, mc="1.21.1")._verify_ticks("pixvox:block/glow_ore", ore, ore.quads)
+            assert bad["diff_px"] > 0, broken.keys()
+
+
+def test_1_21_1_refuses_angles_the_game_rejects():
+    m = Model("odd", Volume(8, 4, 8, fill="#555555"))
+    m.add_plane(fire(16, frames=2, seed=1), y=4, width=10, height=10, angle=30)
+    with tmpdir() as tmp:
+        info = ResourcePack(tmp / "a").add(m)                                    # 1.21.4+ : avertissement
+        assert info["verify"]["diff_px"] == 0 and any("1.21.11" in w for w in info["warnings"])
+        try:
+            ResourcePack(tmp / "b", mc="1.21.1").add(m)
+            raise AssertionError("plan à 30° accepté pour 1.21.1")
+        except ExportError as e:
+            assert "22,5" in str(e) and not (tmp / "b/assets/pixvox/models/block/odd.json").exists()
 
 
 def test_logging_never_crashes_on_a_narrow_console():

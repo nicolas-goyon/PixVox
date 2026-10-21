@@ -5,6 +5,22 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; ve
 
 ## [Non publié]
 
+### Ajouté
+
+- Cible d'export Minecraft 1.21.1 (NeoForge 21.1) : `pixvox export … --mc 1.21.1`, `export_pack(…, mc="1.21.1")`
+  (#18). `pack.mcmeta` au format 34 (datapack 48), `models/item/<nom>.json` au lieu du dossier `items/`,
+  lumière des éléments en `neoforge_data`, plus de `shade_direction_override`, `render_type` dès qu'une
+  face a de la transparence (surcouche lumineuse comprise), angle de plan hors de -45 … 45° par pas de
+  22,5 refusé (code 1), tests sans mod par le papier et `custom_model_data`, `--replace` adapté.
+- `pixvox.mcmodel` lit les fichiers comme 1.21.1 (`ModelLoader(mc="1.21.1")`) : `neoforge_data`,
+  couche de rendu de `render_type`, champs inconnus de 1.21.1 ignorés comme le fait le jeu.
+
+### Modifié
+
+- Contrat JSON `pixvox.result/2` : `export` indique la version visée (`mc`).
+- La vérification d'export compare aussi deux vues de nuit (lumière des éléments, ombrage, couche de
+  rendu) : `views` passe de 6 à 8 au premier instant. Les fichiers de la cible par défaut ne changent pas.
+
 ## [0.1.0]
 
 Première version publique.

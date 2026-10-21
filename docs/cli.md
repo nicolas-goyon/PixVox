@@ -18,7 +18,7 @@ python -m pixvox …        # équivalent, utile sans installation (depuis un cl
 |---|---|---|
 | `pixvox new NOM [--kind block\|model\|multiblock\|item\|animated] [--dir D]` | fichier d'asset de départ, prêt à modifier | `D/NOM.py` |
 | `pixvox review F.py… [--out D] [--only NOM] [--fail-on never\|warn\|err]` | planche de revue + rapport (+ planche d'animation et GIF) | `D/<nom>.review.png`, `.report.txt`, `.anim.png`, `.anim.gif` |
-| `pixvox export F.py… [--pack D] [--ns NS] [--zip Z] [--replace nom=minecraft:bloc]` | resource pack Java vérifié par re-rendu | `D/` (+ `Z`, `D_datapack/` pour les multiblocs) |
+| `pixvox export F.py… [--pack D] [--ns NS] [--zip Z] [--replace nom=minecraft:bloc] [--mc 1.21.4+\|1.21.1]` | resource pack Java vérifié par re-rendu, pour 1.21.4 → 26.3 (défaut) ou 1.21.1 (NeoForge 21.1) | `D/` (+ `Z`, `D_datapack/` pour les multiblocs) |
 | `pixvox mod F.py… --modid ID [--loader fabric\|neoforge] [--build] [--java-home J] [--zip Z]` | projet de mod Minecraft 26.3 (+ `.jar` avec `--build`) | `out/mod_ID_LOADER/` |
 | `pixvox view F.py --yaw Y --pitch P [--persp 2] [--shading gui\|world\|night\|flat] [--tick T]` | rendu à un angle libre | `out/<nom>.view_Y_P.png` |
 | `pixvox anim F.py…` | images d'une animation + GIF | `out/<nom>.anim.png`, `.anim.gif` |
@@ -30,6 +30,9 @@ python -m pixvox …        # équivalent, utile sans installation (depuis un cl
 
 Un fichier d'asset est un script Python qui définit `build()` et renvoie un asset ou une liste
 d'assets (`Block`, `Model`, `MultiBlock`, `Item`). Noms : minuscules, chiffres et `_`.
+
+Le contrat change de numéro (`schema`) quand ses champs changent : `pixvox.result/2` (après 0.1.0)
+ajoute `mc` au résultat d'`export` ; `pixvox.result/1` est celui de 0.1.0.
 
 ## Codes de sortie
 
@@ -50,7 +53,7 @@ Champs communs :
 
 ```json
 {
-  "schema": "pixvox.result/1",
+  "schema": "pixvox.result/2",
   "pixvox": "0.1.0",
   "command": "export",
   "ok": true,
@@ -75,10 +78,11 @@ Champs communs :
 ```json
 {
   "pack": "out/pack", "zip": "out/pack.zip", "datapack": null, "datapack_zip": null, "namespace": "pixvox",
+  "mc": "1.21.4+",
   "assets": [
     {"name": "lumenite_ore", "kind": "block", "file": "examples/lumenite_ore.py",
      "model": "pixvox:block/lumenite_ore", "verified": true,
-     "verify": {"diff_px": 0, "views": 6, "ticks": 1, "missing": []},
+     "verify": {"diff_px": 0, "views": 8, "ticks": 1, "missing": []},
      "warnings": ["…"], "details": {"elements": 2, "layout": "…", "glow_faces": 6}}
   ],
   "refused": [{"name": "trop_grand", "file": "…", "message": "… hors des limites [-16, 32] …"}]
@@ -86,7 +90,16 @@ Champs communs :
 ```
 
 `verified` est vrai quand le modèle et les textures **relus sur disque** et rendus comme le jeu
-donnent exactement l'image de l'asset (0 pixel d'écart, sous 6 angles, à chaque image d'animation).
+donnent exactement l'image de l'asset (0 pixel d'écart : 6 angles et 2 vues de nuit, puis 3 angles à
+chaque image d'animation). `views` compte les vues comparées.
+
+`mc` : version de Minecraft visée (`--mc`). `1.21.4+` (défaut) : formats 46 → 97, définitions d'items
+(`items/`), `light_emission`. `1.21.1` (NeoForge 21.1) : format 34 (datapack 48), `models/item/<nom>.json`
+au lieu de `items/`, lumière des éléments en `neoforge_data`, `render_type` dès qu'une face a de la
+transparence, rotations limitées à -45 … 45° par pas de 22,5 (sinon l'asset est refusé, code 1), et
+`assets/minecraft/models/item/paper.json` qui porte chaque modèle par `custom_model_data` (tests sans mod ;
+`details.custom_model_data`). Dans les deux cas, la vérification relit les fichiers comme la version
+visée les lit.
 
 ### `review`
 

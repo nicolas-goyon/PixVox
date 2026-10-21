@@ -25,7 +25,7 @@ jobs:
         with:
           command: export
           files: assets/**/*.py
-          args: --pack out/pack --zip out/mon_pack.zip --ns mon_pack
+          args: --pack out/pack --zip out/mon_pack.zip --ns mon_pack   # + --mc 1.21.1 pour NeoForge 1.21.1
 ```
 
 Mod compilé (JDK 25 installé par l'action) :
@@ -112,6 +112,7 @@ from pixvox.cli import run                           # même contrat que la lign
 v = Volume(16)
 v.noise(ramp("#7b7d83", 4), cells=3, seed=1)
 infos = export_pack([Block("ma_pierre", v)], "out/pack")  # lève ExportError si un asset est refusé
+# mod NeoForge 1.21.1 : export_pack(…, mc="1.21.1") — fichiers de 1.21.1, vérifiés comme 1.21.1 les lit
 assert all(i["verify"]["diff_px"] == 0 for i in infos)
 
 code, result = run(["review", "assets/ore.py", "--json"])

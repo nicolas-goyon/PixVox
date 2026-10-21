@@ -32,7 +32,7 @@ _GUI_L1 = np.array([-0.2150, 0.9719, 0.0966])
 # Ombrage directionnel « dans le monde » (sans occlusion ambiante)
 WORLD_SHADE = {"up": 1.0, "down": 0.5, "north": 0.8, "south": 0.8, "west": 0.6, "east": 0.6}
 NIGHT = 0.2               # vue « night » : luminosité d'une face sans light_emission, la nuit, sans torche
-SHADINGS = ("gui", "world", "night", "flat")
+SHADINGS = ("gui", "world", "night", "flat", "emission")
 
 
 def closest_face(n) -> str:
@@ -156,6 +156,8 @@ def gui_camera(gui_scale: int = 2, view=INVENTORY, center=(8, 8, 8), display_sca
 def _shade_factor(q: Quad, R: np.ndarray, shading: str) -> float:
     if shading == "flat":
         return 1.0
+    if shading == "emission":       # vérification d'export : lumière propre et ombrage oui/non, sans la direction
+        return (0.8 if q.shade else 1.0) * (NIGHT + (1.0 - NIGHT) * min(15, max(0, q.emission)) / 15.0)
     if shading in ("world", "night"):
         f = WORLD_SHADE.get(q.shade_dir or q.face, 1.0) if q.shade else 1.0
         if shading == "night":
@@ -173,7 +175,9 @@ def render(quads, cam: Camera, bg=None, shading: str = "gui", eps_px: float = 2e
     """Rend une liste de Quads. Retourne une image (H, W, 4) uint8 (et le z-buffer si demandé).
 
     shading : 'gui' (icône d'inventaire), 'world' (ombrage des faces en jeu), 'night' (nuit sans torche :
-              seules les faces à light_emission restent claires) ou 'flat' (couleurs brutes).
+              seules les faces à light_emission restent claires), 'flat' (couleurs brutes) ou 'emission'
+              (la nuit sans direction d'ombrage : lumière propre et ombrage oui/non seulement, pour comparer
+              deux géométries sans dépendre de la face retenue sur une arête).
     Les texels opaques (alpha 255) passent dans le z-buffer ; les semi-transparents sont mélangés ensuite.
     """
     if shading not in SHADINGS:
