@@ -24,15 +24,15 @@ python -m pixvox …        # équivalent, utile sans installation (depuis un cl
 | `pixvox anim F.py…` | images d'une animation + GIF | `out/<nom>.anim.png`, `.anim.gif` |
 | `pixvox compare F.py… [--out IMG]` | variantes côte à côte | `IMG` |
 | `pixvox ascii F.py [--face up\|…]` | pixels exacts en texte | (sortie standard) |
-| `pixvox render-model PACK ns:block/nom [--out IMG]` | aperçu d'un modèle JSON quelconque (pack fait main, Blockbench…) | `IMG` |
+| `pixvox render-model PACK ns:block/nom [--out IMG] [--mc 1.21.4+\|1.21.1]` | aperçu d'un modèle JSON quelconque (pack fait main, Blockbench…), lu comme la version choisie | `IMG` |
 | `pixvox doctor [--java-home J]` | Python, dépendances, JDK, export de test | — |
 | `pixvox summary RESULT.json [--format markdown\|text]` | résumé lisible d'un résultat `--json` | (sortie standard) |
 
 Un fichier d'asset est un script Python qui définit `build()` et renvoie un asset ou une liste
 d'assets (`Block`, `Model`, `MultiBlock`, `Item`). Noms : minuscules, chiffres et `_`.
 
-Le contrat change de numéro (`schema`) quand ses champs changent : `pixvox.result/2` (après 0.1.0)
-ajoute `mc` au résultat d'`export` ; `pixvox.result/1` est celui de 0.1.0.
+Le contrat change de numéro (`schema`) quand ses champs changent : `pixvox.result/1` pour la version
+0.1.0, `pixvox.result/2` ensuite (champ `mc` du résultat d'`export`).
 
 ## Codes de sortie
 
@@ -54,7 +54,7 @@ Champs communs :
 ```json
 {
   "schema": "pixvox.result/2",
-  "pixvox": "0.1.0",
+  "pixvox": "0.2.0",
   "command": "export",
   "ok": true,
   "exit_code": 0,
@@ -96,7 +96,8 @@ chaque image d'animation). `views` compte les vues comparées.
 `mc` : version de Minecraft visée (`--mc`). `1.21.4+` (défaut) : formats 46 → 97, définitions d'items
 (`items/`), `light_emission`. `1.21.1` (NeoForge 21.1) : format 34 (datapack 48), `models/item/<nom>.json`
 au lieu de `items/`, lumière des éléments en `neoforge_data`, `render_type` dès qu'une face a de la
-transparence, rotations limitées à -45 … 45° par pas de 22,5 (sinon l'asset est refusé, code 1), et
+transparence, rotations limitées à -45 … 45° par pas de 22,5 (plan dont l'angle n'est pas multiple de
+22,5° : asset refusé, code 1), et
 `assets/minecraft/models/item/paper.json` qui porte chaque modèle par `custom_model_data` (tests sans mod ;
 `details.custom_model_data`). Dans les deux cas, la vérification relit les fichiers comme la version
 visée les lit.

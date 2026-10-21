@@ -74,7 +74,7 @@ class Target:
                     False : modèles d'items (models/item/<nom>.json) et custom_model_data (1.21.1)
     light           lumière d'un élément : "light_emission" (vanilla 1.21.2+) ou "neoforge_data" (NeoForge)
     any_angle       rotation d'élément libre (1.21.11+ ; avant, simple avertissement) ; False : -45, -22,5,
-                    0, 22,5, 45 seulement, un autre angle refuse l'export
+                    0, 22,5, 45 seulement : un plan dont l'angle n'est pas multiple de 22,5° refuse l'export
     shade_override  écrit aussi shade_direction_override (26.3+ ; le jeu y ignore "shade")
     layers          couche de rendu lue dans render_type (absent : solide), surcouche lumineuse comprise ;
                     False : couche déduite des textures (26.x)
@@ -679,6 +679,7 @@ class ResourcePack:
         self.mod_mode = mod_mode            # ressources d'un mod : un bloc par multibloc (facing + part)
         self.multi_parts: dict = {}         # nom -> [(cellule, modèle)] dans l'ordre des parties
         self.cmd: dict = {}                 # 1.21.1 : modèle -> custom_model_data du papier (tests sans mod)
+        self._bumped: list = []             # modèles dont le numéro tiré du nom était déjà pris
 
     # -------------------------------------------------------------- écriture bas niveau
     def _p(self, *parts) -> Path:
@@ -733,11 +734,15 @@ class ResourcePack:
             self._json(self._p(ns, "models", "item", f"{name}.json"), {"parent": model_ref})
 
     def _cmd(self, model_ref: str) -> int:
-        """1.21.1 : custom_model_data qui affiche model_ref sur le papier. Tiré du nom (stable d'un export à
-        l'autre : les objets déjà posés en jeu gardent leur modèle), < 2^24 (le prédicat est un float)."""
+        """1.21.1 : custom_model_data qui affiche model_ref sur le papier. Tiré du nom, donc stable d'un export
+        à l'autre (les objets déjà posés en jeu gardent leur modèle) sauf collision, signalée ; < 2^24 car
+        le prédicat est comparé en float."""
         if model_ref not in self.cmd:
-            n = 100_000 + zlib.crc32(model_ref.encode("utf-8")) % 900_000
-            while n in self.cmd.values():
+            n = 100_000 + zlib.crc32(model_ref.encode("utf-8")) % (2 ** 24 - 100_001)
+            used = set(self.cmd.values())
+            if n in used:
+                self._bumped.append(model_ref)
+            while n in used:
                 n += 1
             self.cmd[model_ref] = n
         return self.cmd[model_ref]
@@ -755,14 +760,21 @@ class ResourcePack:
         return f"/give @s minecraft:{CARRIER}[minecraft:custom_model_data={self._cmd(model_ref)}]"
 
     def write_carrier(self) -> None:
-        """1.21.1 : modèle du papier avec un override custom_model_data par modèle exporté (par ordre
-        croissant : le dernier prédicat vérifié l'emporte). Garde un remplacement --replace du papier."""
+        """1.21.1 : modèle du papier avec un override custom_model_data par modèle exporté. Le jeu prend le
+        DERNIER override dont le prédicat est <= custom_model_data : ordre croissant, et un retour au papier
+        juste après chaque numéro (un override vers le modèle lui-même rend le papier) pour qu'un numéro
+        inconnu n'affiche pas le modèle voisin. Garde un remplacement --replace du papier."""
         if self.target.item_models or self.mod_mode or not self.cmd:
             return
         path = self._p("minecraft", "models", "item", f"{CARRIER}.json")
         model = json.loads(path.read_text(encoding="utf-8")) if path.exists() else dict(CARRIER_MODEL)
-        model["overrides"] = [{"predicate": {"custom_model_data": n}, "model": ref}
-                              for ref, n in sorted(self.cmd.items(), key=lambda kv: kv[1])]
+        used = set(self.cmd.values())
+        overrides = []
+        for ref, n in sorted(self.cmd.items(), key=lambda kv: kv[1]):
+            overrides.append({"predicate": {"custom_model_data": n}, "model": ref})
+            if n + 1 not in used:
+                overrides.append({"predicate": {"custom_model_data": n + 1}, "model": f"minecraft:item/{CARRIER}"})
+        model["overrides"] = overrides
         self._json(path, model)
 
     # -------------------------------------------------------------- assets
@@ -781,6 +793,11 @@ class ResourcePack:
             info["replace"] = self._replace_vanilla(asset, replace, info)
         if not self.target.item_models and not self.mod_mode:
             info["custom_model_data"] = self._cmd(info["model"])     # 1.21.1 : /give du papier, sans mod
+        if self._bumped:
+            info.setdefault("warnings", []).append(
+                f"custom_model_data : numéro déjà pris pour {', '.join(self._bumped)}, pris au suivant ; il peut "
+                "changer si l'ordre des assets change (un objet posé en jeu montrerait alors un autre modèle)")
+            self._bumped = []
         self.entries.append(info)
         return info
 
@@ -1076,7 +1093,8 @@ class ResourcePack:
                      "rendu en render_type : lues par NeoForge ; vanilla et Fabric les ignorent (pas de lueur ; sous",
                      "Fabric, déclarer la couche de rendu dans le mod).", "",
                      "Tester en jeu SANS mod (1.21.1) : chaque modèle est porté par le papier (custom_model_data,",
-                     f"overrides de assets/minecraft/models/item/{CARRIER}.json) :"]
+                     f"overrides de assets/minecraft/models/item/{CARRIER}.json ; supprimer ce fichier s'il gêne un",
+                     "autre pack qui se sert du papier) :"]
         else:
             lines = ["Pack généré par pixvox", "",
                      f"Formats : min {self.min_format} (1.21.4) -> max {self.max_format} (26.3). Pour une version plus",

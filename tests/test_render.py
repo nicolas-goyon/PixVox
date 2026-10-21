@@ -67,3 +67,39 @@ def test_missing_texture_is_reported():
     q = loader.quads({"textures": {"all": "t:block/nope"}, "elements": [
         {"from": [0, 0, 0], "to": [16, 16, 16], "faces": {"up": {"texture": "#all"}}}]})
     assert len(q) == 1 and "t:block/nope" in loader.missing
+
+
+def test_model_loader_reads_like_1_21_1():
+    """Lecture « 1.21.1 » (NeoForge 21.1) : couche de rendu de render_type (seuils des shaders du jar),
+    neoforge_data de la face puis de l'élément, light_emission ignoré, modèles que le jeu refuse."""
+    import numpy as np
+
+    from pixvox.mcmodel import layer_texture, render_layer
+    texels = np.array([[[9, 9, 9, al] for al in (0, 20, 100, 200, 255)]], np.uint8)
+
+    def alpha(layer):
+        return layer_texture(texels, layer)[0, :, 3].tolist()
+
+    assert (render_layer(None), render_layer("cutout"), render_layer("neoforge:autre")) == ("solid", "cutout", "solid")
+    assert alpha("solid") == [255] * 5                                      # l'alpha ne compte pas
+    assert alpha("cutout") == [0, 0, 255, 255, 255]                          # jeté sous 0,1
+    assert alpha("cutout_mipped") == [0, 0, 0, 255, 255]                     # jeté sous 0,5
+    assert alpha("translucent") == [0, 20, 100, 200, 255]
+    assert alpha("tripwire") == [0, 0, 100, 200, 255]
+    tex = {"t:block/t": np.full((16, 16, 4), 255, np.uint8)}
+    el = {"from": [0, 0, 0], "to": [16, 16, 16], "light_emission": 9, "neoforge_data": {"block_light": 12},
+          "faces": {"up": {"texture": "#t"}, "down": {"texture": "#t", "neoforge_data": {}}}}
+
+    def quads(element, mc):
+        return ModelLoader(extra_textures=tex, mc=mc).quads({"textures": {"t": "t:block/t"}, "elements": [element]})
+
+    assert {q.face: q.emission for q in quads(el, "1.21.1")} == {"up": 12, "down": 0}
+    assert {q.face: q.emission for q in quads(el, "1.21.4+")} == {"up": 12, "down": 9}
+    rot = {"origin": [8, 8, 8], "axis": "y"}
+    for bad in ({**el, "forge_data": {}}, {**el, "rotation": {**rot, "angle": 30}}, {**el, "rotation": rot}):
+        assert quads(bad, "1.21.4+")                                        # accepté par la lecture 1.21.4+
+        try:
+            quads(bad, "1.21.1")
+            raise AssertionError(f"modèle refusé par 1.21.1 accepté : {set(bad) - set(el)}")
+        except ValueError:
+            pass

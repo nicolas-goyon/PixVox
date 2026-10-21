@@ -73,6 +73,9 @@ def test_json_contract_and_exit_codes():
         assert code == EXIT_OK and d["mc"] == "1.21.1" and all(x["verified"] for x in d["assets"]), d["errors"]
         assert not (tmp / "p121/assets/pixvox/items").exists()
         assert (tmp / "p121/assets/pixvox/models/item/blk.json").exists()
+        code, d = _cli("render-model", str(tmp / "p121"), "pixvox:block/peb", "--mc", "1.21.1",
+                       "--out", str(tmp / "rm121.png"), cwd=tmp)
+        assert code == EXIT_OK and d["quads"] > 0 and d["missing"] == []
         code, d = _cli("export", good, "--mc", "1.20.1", cwd=tmp)
         assert code == EXIT_USAGE and d["errors"][0]["type"] == "usage" and "1.21.1" in d["errors"][0]["message"]
         # modèle refusé par le jeu (48 unités de haut > 32) : code 1, les autres sont exportés
