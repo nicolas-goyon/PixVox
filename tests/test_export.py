@@ -358,3 +358,11 @@ def test_alpha_animation_keeps_the_geometry_of_the_first_frame():
         tall_faded.set(tall_faded.m_box(4, 31, 4, 4, 31, 4), (136, 136, 136, 100))
         multi = ResourcePack(tmp / "b").add(MultiBlock("fondu", [tall, tall_faded], frametime=4))
         assert multi["verify"]["diff_px"] == 0
+def test_verified_is_public():
+    import pixvox
+    assert "verified" in pixvox.__all__
+    with tmpdir() as tmp:
+        info = export_pack([Block("cube_public", marked_volume())], root=tmp / "pack")[0]
+    assert pixvox.verified(info)
+    assert not pixvox.verified({**info, "verify": {**info["verify"], "diff_px": 1}})
+    assert not pixvox.verified({**info, "verify": {**info["verify"], "missing": ["x"]}})

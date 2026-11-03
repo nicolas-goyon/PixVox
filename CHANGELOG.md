@@ -12,6 +12,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; ve
   lumière des éléments en `neoforge_data`, plus de `shade_direction_override`, `render_type` dès qu'une
   face a de la transparence (surcouche lumineuse comprise), plan dont l'angle n'est pas multiple de 22,5°
   refusé (code 1), tests sans mod par le papier et `custom_model_data`, `--replace` adapté.
+- API publique `pixvox.verified(info)` : vrai si un asset rendu par `export_pack` est fidèle (#32).
 - `pixvox.mcmodel` lit les fichiers comme 1.21.1 (`ModelLoader(mc="1.21.1")`, `render-model --mc 1.21.1`) :
   `neoforge_data`, couche de rendu de `render_type`, champs inconnus de 1.21.1 ignorés comme le fait le
   jeu, modèles que le jeu refuse (`forge_data`, rotation interdite) signalés.
