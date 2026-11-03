@@ -312,11 +312,26 @@ class Volume:
         """Voxels pleins dont le voisin dans la direction `face` est vide (ou hors volume)."""
         return self.solid & ~self._neighbor_solid(NORMALS[face])
 
+    def m_visible(self, face: str) -> np.ndarray:
+        """Voxels dont la face `face` se voit : voisin vide, ou voxel opaque derrière un voxel semi-transparent
+        (verre teinté avec un objet dedans). Entre deux voxels semi-transparents, pas de face, comme le
+        verre du jeu. Sans semi-transparence, identique à m_exposed."""
+        exposed = self.m_exposed(face)
+        semi = self.solid & (self.data[..., 3] < 255)
+        if not semi.any():
+            return exposed
+        nx, ny, nz = NORMALS[face]
+        behind = np.zeros(self.shape, bool)
+        src = [slice(max(-k, 0), self.shape[i] - max(k, 0)) for i, k in enumerate((nx, ny, nz))]
+        dst = [slice(max(k, 0), self.shape[i] - max(-k, 0)) for i, k in enumerate((nx, ny, nz))]
+        behind[tuple(src)] = semi[tuple(dst)]
+        return exposed | (self.solid & ~semi & behind)
+
     def m_surface(self) -> np.ndarray:
-        """Voxels pleins visibles depuis au moins une direction."""
+        """Voxels pleins visibles depuis au moins une direction (y compris à travers un voxel semi-transparent)."""
         m = np.zeros(self.shape, bool)
         for f in FACES:
-            m |= self.m_exposed(f)
+            m |= self.m_visible(f)
         return m
 
     def m_hidden(self) -> np.ndarray:

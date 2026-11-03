@@ -103,3 +103,15 @@ def test_model_loader_reads_like_1_21_1():
             raise AssertionError(f"modèle refusé par 1.21.1 accepté : {set(bad) - set(el)}")
         except ValueError:
             pass
+
+
+def test_translucent_image_does_not_depend_on_the_quads():
+    from pixvox.render import INVENTORY, face_quad, fit_camera, render
+    tex = np.zeros((4, 4, 4), np.uint8)
+    tex[...] = (200, 40, 40, 128)
+    whole = [face_quad("north", (0, 0, 0), (16, 16, 16), tex)]
+    half = [face_quad("north", (0, 0, 0), (8, 16, 16), tex[:, 2:]), face_quad("north", (8, 0, 0), (16, 16, 16), tex[:, :2])]
+    behind = [face_quad("north", (0, 0, 8), (16, 16, 16), np.full((4, 4, 4), 90, np.uint8))]
+    cam = fit_camera(whole, INVENTORY, 64, 64, jitter=(0.313, 0.227))
+    a = render(whole + behind, cam, shading="flat")
+    assert (a == render(behind + half, cam, shading="flat")).all()

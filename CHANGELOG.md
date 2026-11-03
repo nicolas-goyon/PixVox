@@ -16,6 +16,14 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; ve
   `neoforge_data`, couche de rendu de `render_type`, champs inconnus de 1.21.1 ignorés comme le fait le
   jeu, modèles que le jeu refuse (`forge_data`, rotation interdite) signalés.
 
+### Corrigé
+
+- Un volume qui mélange voxels semi-transparents et opaques se vérifie à 0 px (`Model`, `MultiBlock` et sa
+  miniature, les deux cibles) (#21). Un voxel opaque se voit à travers un voxel semi-transparent
+  (`Volume.m_visible`), une boîte ne réunit plus les deux opacités, une face translucide ne montre plus sa
+  partie cachée, et le rendu mélange les faces translucides pixel par pixel : l'image ne dépend plus du
+  découpage en quads. Les fichiers d'un volume opaque ne changent pas.
+
 ### Modifié
 
 - Contrat JSON `pixvox.result/2` : `export` indique la version visée (`mc`).

@@ -133,6 +133,8 @@ ratée), `2` erreur d'utilisation ou d'environnement, `3` erreur interne.
 - Java Edition uniquement (pas Bedrock) ; resource packs pour 1.21.4 → 26.3 ou 1.21.1, mods pour
   Minecraft 26.3 (versions dans `pixvox/mod.py`).
 - Seules les textures s'animent (limite du jeu) ; pas de tintes de biome ni de textures connectées.
+- Faces translucides : pixvox les mélange pixel par pixel, le jeu les trie quad par quad. Là où deux faces
+  translucides se croisent, l'image en jeu peut différer de la planche ; la vérification ne compare pas ce tri.
 - L'ombrage d'inventaire est une approximation fidèle, pas le rendu OpenGL du jeu.
 - pixvox ne lance jamais Minecraft : tester en jeu reste une étape humaine.
 

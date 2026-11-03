@@ -170,6 +170,30 @@ def _shade_factor(q: Quad, R: np.ndarray, shading: str) -> float:
     return min(1.0, f)
 
 
+def _blend_translucent(img, zbuf, ys, xs, depth, margin, rgb, a) -> None:
+    """Mélange les fragments semi-transparents devant le z-buffer, pixel par pixel, du plus loin au plus
+    proche. À même pixel et même profondeur, un fragment couvert par la seule tolérance anti-trous (arête
+    de deux quads voisins) est ignoré ; une surcouche, qui couvre vraiment le pixel, reste dessinée après."""
+    keep = depth >= zbuf[ys, xs] - 1e-7
+    ys, xs, depth, margin, rgb, a = ys[keep], xs[keep], depth[keep], margin[keep], rgb[keep], a[keep]
+    level = np.round(depth * 1e6)
+    order = np.lexsort((-margin, level, xs, ys))             # stable : à égalité, ordre de dessin
+    ys, xs, level, margin, rgb, a = ys[order], xs[order], level[order], margin[order], rgb[order], a[order]
+    same = (ys[1:] == ys[:-1]) & (xs[1:] == xs[:-1]) & (level[1:] == level[:-1])
+    keep = np.ones(ys.shape, bool)
+    keep[1:] = ~(same & (margin[1:] < 0))
+    ys, xs, rgb, a = ys[keep], xs[keep], rgb[keep], a[keep]
+    new_pixel = np.ones(ys.shape, bool)
+    new_pixel[1:] = (ys[1:] != ys[:-1]) | (xs[1:] != xs[:-1])
+    starts = np.flatnonzero(new_pixel)
+    rank = np.arange(ys.size) - starts[np.cumsum(new_pixel) - 1]
+    for r in range(int(rank.max(initial=-1)) + 1):
+        m = rank == r
+        al = a[m, None] / 255.0
+        img[ys[m], xs[m], :3] = img[ys[m], xs[m], :3] * (1 - al) + rgb[m] * al
+        img[ys[m], xs[m], 3] = np.maximum(img[ys[m], xs[m], 3], a[m])
+
+
 def render(quads, cam: Camera, bg=None, shading: str = "gui", eps_px: float = 2e-3,
            return_depth: bool = False, alpha_cutoff: int = 1):
     """Rend une liste de Quads. Retourne une image (H, W, 4) uint8 (et le z-buffer si demandé).
@@ -178,7 +202,9 @@ def render(quads, cam: Camera, bg=None, shading: str = "gui", eps_px: float = 2e
               seules les faces à light_emission restent claires), 'flat' (couleurs brutes) ou 'emission'
               (la nuit sans direction d'ombrage : lumière propre et ombrage oui/non seulement, pour comparer
               deux géométries sans dépendre de la face retenue sur une arête).
-    Les texels opaques (alpha 255) passent dans le z-buffer ; les semi-transparents sont mélangés ensuite.
+    Les texels opaques (alpha 255) passent dans le z-buffer ; les semi-transparents sont mélangés ensuite,
+    pixel par pixel du plus loin au plus proche : l'image ne dépend pas du découpage en quads. Le jeu trie
+    quad par quad : là où deux faces translucides se croisent, son image peut s'en écarter (voir « Limites » du README).
     """
     if shading not in SHADINGS:
         raise ValueError(f"shading={shading!r} : choisir parmi {', '.join(SHADINGS)}")
@@ -281,15 +307,10 @@ def render(quads, cam: Camera, bg=None, shading: str = "gui", eps_px: float = 2e
         sub_m[opaque] = margin[opaque]
         semi = inside & (a >= alpha_cutoff) & (a < 255)
         if semi.any():
-            translucent.append((float(np.mean(depth[semi])), iy0, ix0, semi, depth, rgb, a))
-    for _, iy0, ix0, semi, depth, rgb, a in sorted(translucent, key=lambda e: e[0]):
-        h, w = semi.shape
-        sub_img = img[iy0:iy0 + h, ix0:ix0 + w]
-        sub_z = zbuf[iy0:iy0 + h, ix0:ix0 + w]
-        m = semi & (depth >= sub_z - 1e-7)
-        al = (a / 255.0)[..., None]
-        sub_img[m, :3] = sub_img[m, :3] * (1 - al[m]) + rgb[m] * al[m]
-        sub_img[m, 3] = np.maximum(sub_img[m, 3], a[m])
+            ys, xs = np.nonzero(semi)
+            translucent.append((ys + iy0, xs + ix0, depth[semi], margin[semi], rgb[semi], a[semi]))
+    if translucent:
+        _blend_translucent(img, zbuf, *(np.concatenate(c) for c in zip(*translucent)))
     out = np.clip(np.round(img), 0, 255).astype(np.uint8)
     return (out, zbuf) if return_depth else out
 
@@ -334,8 +355,8 @@ def _rects(mask: np.ndarray) -> list:
 
 
 def quads_from_volume(vol, offset=(0, 0, 0), voxel_size: float = 1.0, emissive=None, emission: int = 15) -> list:
-    """Rendu exact d'un volume : pour chaque direction et chaque couche, les faces de voxels exposées
-    (voisin vide) regroupées en rectangles texturés. C'est la référence « vérité terrain ».
+    """Rendu exact d'un volume : pour chaque direction et chaque couche, les faces de voxels visibles
+    (voisin vide, ou voxel opaque derrière un voxel semi-transparent) regroupées en rectangles texturés. C'est la référence « vérité terrain ».
     emissive : masque des voxels lumineux (leurs faces reçoivent emission, visible en vue 'night')."""
     from .volume import face_coords
     sx, sy, sz = vol.shape
@@ -344,7 +365,7 @@ def quads_from_volume(vol, offset=(0, 0, 0), voxel_size: float = 1.0, emissive=N
     for f in FACES:
         lax, lside, *_ = FACE_AXES[f]
         a = AXIS[lax]
-        exposed = vol.m_exposed(f)
+        exposed = vol.m_visible(f)
         for layer in range(vol.shape[a]):
             lo = [0, 0, 0]
             hi = [sx, sy, sz]
