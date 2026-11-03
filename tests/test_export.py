@@ -402,3 +402,9 @@ def test_unknown_texture_layout_is_refused():
             assert "zip" in str(e)
         else:
             raise AssertionError("rangement inconnu accepté")
+
+
+def test_two_assets_with_the_same_name_are_refused():
+    with tmpdir() as tmp:
+        res = export_assets([Block("meme", marked_volume()), Block("meme", marked_volume(2))], tmp / "pack", log=None)
+        assert [n for n, _ in res["refused"]] == ["meme"] and len(res["infos"]) == 1

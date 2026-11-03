@@ -719,6 +719,7 @@ class ResourcePack:
         self.mod_mode = mod_mode            # ressources d'un mod : un bloc par multibloc (facing + part)
         self.multi_parts: dict = {}         # nom -> [(cellule, modèle)] dans l'ordre des parties
         self.cmd: dict = {}                 # 1.21.1 : modèle -> custom_model_data du papier (tests sans mod)
+        self.names: set = set()             # noms de modèles déjà écrits
         self._bumped: list = []             # modèles dont le numéro tiré du nom était déjà pris
 
     # -------------------------------------------------------------- écriture bas niveau
@@ -822,7 +823,16 @@ class ResourcePack:
         self._json(path, model)
 
     # -------------------------------------------------------------- assets
+    def _claim(self, names) -> None:
+        """Refuse un asset dont un modèle porte le nom d'un modèle déjà écrit : il l'écraserait sur le disque
+        après sa vérification."""
+        taken = sorted(set(names) & self.names)
+        if taken:
+            raise ExportError(f"nom déjà utilisé dans ce pack : {', '.join(taken)} (l'export écraserait ses fichiers)")
+        self.names |= set(names)
+
     def add(self, asset, replace: str | None = None) -> dict:
+        self._claim(getattr(asset, "written_names", lambda: [asset.name])())
         if isinstance(asset, Block):
             info = self._add_block(asset)
         elif isinstance(asset, MultiBlock):

@@ -18,7 +18,7 @@ python -m pixvox …        # équivalent, utile sans installation (depuis un cl
 |---|---|---|
 | `pixvox new NOM [--kind block\|model\|multiblock\|item\|animated] [--dir D]` | fichier d'asset de départ, prêt à modifier | `D/NOM.py` |
 | `pixvox review F.py… [--out D] [--only NOM] [--fail-on never\|warn\|err]` | planche de revue + rapport (+ planche d'animation et GIF) | `D/<nom>.review.png`, `.report.txt`, `.anim.png`, `.anim.gif` |
-| `pixvox export F.py… [--pack D] [--ns NS] [--zip Z] [--replace nom=minecraft:bloc] [--mc 1.21.4+\|1.21.1]` | resource pack Java vérifié par re-rendu, pour 1.21.4 → 26.3 (défaut) ou 1.21.1 (NeoForge 21.1) | `D/` (+ `Z`, `D_datapack/` pour les multiblocs) |
+| `pixvox export F.py… [--pack D] [--ns NS] [--zip Z] [--replace nom=minecraft:bloc] [--mc 1.21.4+\|1.21.1] [--textures flat\|folders]` | resource pack Java vérifié par re-rendu, pour 1.21.4 → 26.3 (défaut) ou 1.21.1 (NeoForge 21.1) | `D/` (+ `Z`, `D_datapack/` pour les multiblocs) |
 | `pixvox mod F.py… --modid ID [--loader fabric\|neoforge] [--build] [--java-home J] [--zip Z]` | projet de mod Minecraft 26.3 (+ `.jar` avec `--build`) | `out/mod_ID_LOADER/` |
 | `pixvox view F.py --yaw Y --pitch P [--persp 2] [--shading gui\|world\|night\|flat] [--tick T]` | rendu à un angle libre | `out/<nom>.view_Y_P.png` |
 | `pixvox anim F.py…` | images d'une animation + GIF | `out/<nom>.anim.png`, `.anim.gif` |
@@ -32,7 +32,7 @@ Un fichier d'asset est un script Python qui définit `build()` et renvoie un ass
 d'assets (`Block`, `Model`, `MultiBlock`, `Item`). Noms : minuscules, chiffres et `_`.
 
 Le contrat change de numéro (`schema`) quand ses champs changent : `pixvox.result/1` pour la version
-0.1.0, `pixvox.result/2` ensuite (champ `mc` du résultat d'`export`).
+0.1.0, `pixvox.result/2` ensuite (champs `mc` et `textures` du résultat d'`export`).
 
 ## Codes de sortie
 
