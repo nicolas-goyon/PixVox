@@ -71,7 +71,7 @@ Champs communs :
   dossier vide ou qu'il a lui-même créé (fichier `.pixvox`), sinon erreur `output_dir` (code 2) : `--pack .`
   ne peut pas effacer votre dossier de travail.
 - Les chemins sont écrits avec des `/`, relatifs au dossier courant si on les a donnés ainsi.
-- `kind` d'un asset : `block`, `model`, `multiblock` ou `item` (identifiants stables, en anglais).
+- `kind` d'un asset : `block`, `model`, `multiblock`, `multipart` ou `item` (identifiants stables, en anglais).
 
 ### `export`
 

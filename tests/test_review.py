@@ -78,3 +78,17 @@ def test_examples_build_with_unique_valid_names():
         names += [a.name for a in (res if isinstance(res, (list, tuple)) else [res])]
     assert len(names) >= 10 and len(names) == len(set(names)), names
     assert all(re.fullmatch(r"[a-z0-9_]+", n) for n in names), names
+
+
+def test_multipart_review_sheet():
+    from pixvox import Multipart, Part
+    v = Volume(16, 16, 16)
+    v.set(v.m_box(2, 2, 7, 13, 13, 8), "#8a6a48")
+    extra = Volume(4, 4, 1)
+    extra.set(None, "#e8dcbc")
+    mp = Multipart("sheet", [Part(Model("sheet_base", v)), Part(Model("sheet_extra", extra), {"open": 1})],
+                   {"open": [0, 1]}, facing=True)
+    assert [len(mp.active(s)) for _, s in mp.states()] == [1, 2, 2, 2, 2]
+    with tmpdir() as tmp:
+        r = review_data(mp, tmp)
+        assert r["sheet"].exists() and "bloc multipart" in r["report"]

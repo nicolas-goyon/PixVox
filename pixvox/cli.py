@@ -68,9 +68,10 @@ class _Parser(argparse.ArgumentParser):
 
 # ============================================================================ outils
 def asset_kind(asset) -> str:
-    """'block' | 'model' | 'multiblock' | 'item' (identifiants stables, pour les logiciels)."""
-    from .assets import Block, Item, Model, MultiBlock
-    for cls, name in ((MultiBlock, "multiblock"), (Block, "block"), (Model, "model"), (Item, "item")):
+    """'block' | 'model' | 'multiblock' | 'multipart' | 'item' (identifiants stables, pour les logiciels)."""
+    from .assets import Block, Item, Model, MultiBlock, Multipart
+    for cls, name in ((MultiBlock, "multiblock"), (Multipart, "multipart"), (Block, "block"), (Model, "model"),
+                      (Item, "item")):
         if isinstance(asset, cls):
             return name
     return type(asset).__name__.lower()

@@ -10,7 +10,7 @@ Boucle de travail :
 Ligne de commande : `pixvox --help` (ou `python -m pixvox`) ; résultats --json : docs/cli.md.
 """
 from .anim import EMBER, FIRE, SOUL_EMBER, SOUL_FIRE, Anim, Timing, fire, flow, pulse
-from .assets import Block, Item, Model, MultiBlock, Plane, Props
+from .assets import Block, Item, Model, MultiBlock, Multipart, Part, Plane, Props
 from .color import (
     Ramp,
     adjust,
@@ -100,7 +100,7 @@ def export_mod(assets, out="out/mod", modid="pixvox_mod", name=None, **kw):
     return _export_mod(assets, out, modid, name, **kw)
 
 
-__all__ = ["verified", "Block", "Item", "Model", "MultiBlock", "Plane", "Props", "Anim", "Timing", "fire", "pulse",
+__all__ = ["verified", "Multipart", "Part", "Block", "Item", "Model", "MultiBlock", "Plane", "Props", "Anim", "Timing", "fire", "pulse",
            "flow", "FIRE", "SOUL_FIRE", "EMBER", "SOUL_EMBER", "Volume", "Sprite", "Ramp", "ramp",
            "ramp_between", "rgba", "hexa", "mix", "adjust", "lighten", "darken", "shade", "lightness",
            "luminance", "delta_e", "nearest", "perlin", "worley", "equalize", "FACES", "NORMALS",

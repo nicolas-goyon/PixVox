@@ -73,3 +73,17 @@ def test_java_probe_never_crashes():
     assert jh is None or isinstance(jh, str)
     assert v is None or v >= 1
     assert java_version(None) is None and java_version("/chemin/inexistant") is None
+
+
+def test_multipart_is_refused_by_mod():
+    from pixvox import Model, Multipart, Part, Volume
+    from pixvox.export import ExportError
+    v = Volume(4, 4, 4)
+    v.set(None, "#888888")
+    with tmpdir() as tmp:
+        try:
+            export_mod([Multipart("mp", [Part(Model("mp_base", v))])], tmp / "mod", "demo")
+        except ExportError as e:
+            assert "Multipart" in str(e)
+        else:
+            raise AssertionError("Multipart accepté par pixvox mod")

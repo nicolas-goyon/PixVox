@@ -85,6 +85,7 @@ ou environnement / 3 interne (contrat : `docs/cli.md`). `python -m pixvox summar
 | textures existantes à vérifier / corriger | `Block.from_faces(name, {face: Sprite ou .png})`, puis `fix=True` |
 | forme libre (champignon, brasero, lanterne) | `Model(name, volume)` → éléments + atlas (limite [-16, 32]) |
 | objet de plusieurs blocs (statue, arbre, machine) | `MultiBlock(name, volume)` : sans limite de taille |
+| bloc dont les parties dépendent de ses propriétés | `Multipart(name, parts, properties, facing=True, item=…)` : blockstate `multipart` (export seulement, pas `pixvox mod`) |
 | même objet à plusieurs tailles / finesses | décrire en unités de conception : `Volume.design(extent, res=, scale=)` |
 | animation (feu, lave, braises, runes) | liste de volumes (`v.frames(n)` + `pulse` / `flow`), `fire()` + `add_cross` |
 | partie qui brille la nuit | `emissive=masque, emission=12` sur Block / Model / MultiBlock ; plans `emission=15` |
@@ -223,6 +224,11 @@ asset.props = Props(...)   asset.quads(tick)   asset.volume_at(tick)
 
 review(asset, out_dir="out")   animate(asset, out_dir)   compare([a, b], "out/cmp.png", size=300)
 view(asset, yaw, pitch, size=600, shading="gui"|"world"|"night"|"flat", out_dir="out", persp=0.0, tick=0)
+Multipart("tableau", [Part(base, {"column": 1}),                  # une valeur, une liste, un range
+                     Part(feuille, {"column": 1, "papers": range(1, 8)}),
+                     Part.empty("tableau_vide", base, {"OR": [{"column": [0, 2]}, {"row": [0, 2]}]})],
+          {"column": range(3), "row": range(3), "papers": range(8)},
+          facing=True, item=complet, item_display={...})         # item : modèle de l'objet en main
 export_pack([...], root="out/pack", namespace="pixvox", zip_path=None, replace={"nom": "minecraft:stone"},
             textures="flat")   # ou "folders" : textures/block/<modèle>/atlas.png ; verified(info) : export fidèle
 export_mod([...], out, modid, name=None, *, loader="fabric", build=False, java_home=None, zip_path=None)

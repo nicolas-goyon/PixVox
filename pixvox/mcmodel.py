@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import math
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -246,6 +247,22 @@ class ModelLoader:
                 out += flat_item_quads(self.texture(layer0), off)
         return out
 
+    def blockstate_quads(self, ref: str, state: dict) -> list:
+        """Quads d'un blockstate multipart dans l'état `state`, relu du disque comme le jeu : chaque partie
+        dont la condition est vraie, avec sa rotation y."""
+        path = self._find("blockstates", ref, ".json")
+        if path is None:
+            self.missing.append(norm_id(ref))
+            return []
+        out = []
+        for case in json.loads(path.read_text(encoding="utf-8"))["multipart"]:
+            if when_matches(case.get("when"), state):
+                apply = case["apply"][0] if isinstance(case["apply"], list) else case["apply"]
+                if apply.get("x"):
+                    raise ValueError("rotation x d'une partie multipart : non gérée par la vérification")
+                out += rotate_quads_y(self.quads(apply["model"]), apply.get("y", 0))
+        return out
+
     def _tex_for(self, textures, key, layer: str | None = None):
         ref = self._deref(textures, key)
         if ref is None:
@@ -258,6 +275,41 @@ class ModelLoader:
         if k not in self._cache:
             self._cache[k] = layer_texture(tex, layer)
         return self._cache[k]
+
+
+def when_matches(when: dict | None, state: dict) -> bool:
+    """Condition d'une partie de blockstate multipart, lue comme le jeu : toutes les propriétés (a|b : l'une
+    des valeurs), ou "OR" / "AND" sur des sous-conditions. Absente : toujours vraie."""
+    if not when:
+        return True
+    if "OR" in when:
+        return any(when_matches(w, state) for w in when["OR"])
+    if "AND" in when:
+        return all(when_matches(w, state) for w in when["AND"])
+    return all(str(state.get(k)) in str(v).split("|") for k, v in when.items())
+
+
+CENTER = np.array([8.0, 8.0, 8.0])
+ROTATE_Y = {"north": "east", "east": "south", "south": "west", "west": "north", "up": "up", "down": "down"}
+
+
+def rotate_quads_y(quads: list, angle: int) -> list:
+    """Quads tournés comme par "y" d'un blockstate : sens horaire vu du dessus autour du centre du bloc
+    (90 : la face nord devient la face est). Les textures tournent avec la géométrie."""
+    turns = int(angle) // 90 % 4
+    if int(angle) % 90:
+        raise ValueError(f"rotation y={angle} : le jeu n'accepte que des multiples de 90")
+    out = list(quads)
+    for _ in range(turns):
+        def turn(v):
+            return np.array([-v[2], v[1], v[0]], float)
+        rotated = []
+        for q in out:
+            p0 = turn(q.p0 - CENTER) + CENTER
+            rotated.append(replace(q, p0=p0, e1=turn(q.e1), e2=turn(q.e2), normal=turn(q.normal),
+                                   face=ROTATE_Y.get(q.face, q.face), shade_dir=ROTATE_Y.get(q.shade_dir, q.shade_dir)))
+        out = rotated
+    return out
 
 
 def _rot_matrix(rot: dict) -> np.ndarray:

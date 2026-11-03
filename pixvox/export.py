@@ -8,6 +8,9 @@ Disposition produite (namespace `pixvox` par défaut) :
   assets/<ns>/blockstates/<nom>.json              pour un mod qui enregistre le bloc <ns>:<nom>
   assets/<ns>/items/<nom>.json                    définition d'item (1.21.4+) -> composant item_model
 
+Multipart : un modèle par partie (sans blockstate ni objet à leur nom), blockstates/<nom>.json en
+multipart, et l'objet <nom> sur le modèle choisi (models/item/<nom>.json s'il a un champ display).
+
 Rangement textures="folders" : un dossier par modèle, assets/<ns>/textures/block/<nom>/atlas.png (texture
 principale), glow.png, anim.png, p0.png, top.png… Les références des modèles et la vérification suivent.
 
@@ -39,7 +42,7 @@ from PIL import Image
 
 from ._io import MARKER, mark_output_dir, prepare_output_dir, say
 from .anim import Anim, preview_ticks
-from .assets import Block, Item, Model, MultiBlock, Plane
+from .assets import Block, Item, Model, MultiBlock, Multipart, Plane
 from .mcmodel import ModelLoader
 from .render import BACK, INVENTORY, compare, fit_camera, quads_from_volume, render, rot_matrix
 from .volume import FACES, NORMALS, face_coords
@@ -770,9 +773,13 @@ class ResourcePack:
         """Modèle de bloc, dans les champs que lit la version visée (relu tel quel par la vérification)."""
         self._json(path, adapt_model(model, self.target))
 
-    def _item(self, ns: str, name: str, model_ref: str) -> None:
+    def _item(self, ns: str, name: str, model_ref: str, display: dict | None = None) -> None:
         """Ce qui affiche model_ref comme item <ns>:<name> : définition d'item (items/, 1.21.4+) ou modèle
-        d'item (models/item/, 1.21.1 ; un item plat y a déjà son modèle item/generated)."""
+        d'item (models/item/, 1.21.1 ; un item plat y a déjà son modèle item/generated). display : passe par
+        un modèle models/item/<name>.json qui porte ce champ, dans les deux cibles."""
+        if display:
+            self._json(self._p(ns, "models", "item", f"{name}.json"), {"parent": model_ref, "display": display})
+            model_ref = f"{ns}:item/{name}"
         if self.target.item_models:
             self._json(self._p(ns, "items", f"{name}.json"), {"model": {"type": "minecraft:model", "model": model_ref}})
         elif model_ref != f"{ns}:item/{name}":
@@ -839,6 +846,8 @@ class ResourcePack:
             info = self._add_multiblock(asset)
         elif isinstance(asset, Model):
             info = self._add_model(asset)
+        elif isinstance(asset, Multipart):
+            info = self._add_multipart(asset)
         elif isinstance(asset, Item):
             info = self._add_item(asset)
         else:
@@ -920,7 +929,41 @@ class ResourcePack:
             cut |= bool((al == 0).any())
         return "translucent" if semi else ("cutout" if cut else "solid")
 
-    def _add_model(self, m: Model) -> dict:
+    def _add_multipart(self, mp: Multipart) -> dict:
+        """Modèles des parties (chacun vérifié seul), blockstate multipart, objet, puis vérification des
+        états utiles : le blockstate relu du disque doit donner la somme des modèles affichés."""
+        models = list({id(m): m for m in mp.models + [mp.item]}.values())
+        parts = [self._add_model(m, block=False) for m in models]
+        for p in mp.parts:
+            if p.model is None:
+                source = json.loads(self._p(self.ns, "models", "block", f"{p.particle.name}.json").read_text("utf-8"))
+                self._json(self._p(self.ns, "models", "block", f"{p.empty_name}.json"),
+                           {"textures": {"particle": source["textures"]["particle"]}})
+        self._json(self._p(self.ns, "blockstates", f"{mp.name}.json"), mp.blockstate(self.ns))
+        self._item(self.ns, mp.name, f"{self.ns}:block/{mp.item.name}", mp.item_display)
+        loader = ModelLoader([self.root], mc=self.target.mc)
+        diff = {"diff_px": sum(i["verify"]["diff_px"] for i in parts), "views": sum(i["verify"]["views"] for i in parts),
+                "missing": sorted({t for i in parts for t in i["verify"]["missing"]}), "ticks": 1}
+        states = mp.states()
+        for _, state in states:
+            expected = mp.state_quads(state)
+            if expected:
+                d = self.verify(None, expected, views=(INVENTORY, BACK, (135, 25)),
+                                quads=loader.blockstate_quads(f"{self.ns}:{mp.name}", state))
+                diff["diff_px"] += d["diff_px"]
+                diff["views"] += d["views"]
+        for case in mp.blockstate(self.ns)["multipart"]:                 # chaque modèle cité, même vide
+            res = loader.resolve(case["apply"]["model"])
+            for ref in res["textures"].values():
+                loader.texture(ref)
+        diff["missing"] = sorted(set(diff["missing"]) | set(loader.missing))
+        item = f"{self.ns}:item/{mp.name}" if mp.item_display else f"{self.ns}:block/{mp.item.name}"
+        warnings = [w for i in parts for w in i.get("warnings", [])]
+        return {"name": mp.name, "kind": "multipart", "model": item, "parts": len(mp.parts), "models": len(models),
+                "elements": sum(i["elements"] for i in parts), "states": len(states),
+                "verify": diff, "warnings": warnings, "animated": sum(i["animated"] for i in parts)}
+
+    def _add_model(self, m: Model, block: bool = True) -> dict:
         opt = optimize_model(m)
         elements = list(opt.elements)
         plane_vars: dict = {}
@@ -970,7 +1013,8 @@ class ResourcePack:
             model["render_type"] = f"minecraft:{rt}"
         ref = f"{self.ns}:block/{m.name}"
         self._write_model(self._p(self.ns, "models", "block", f"{m.name}.json"), model)
-        self._block_common(m.name, ref, m.states)
+        if block:
+            self._block_common(m.name, ref, m.states)
         diff = self._verify_ticks(ref, m, m.quads)
         self._icon_from(m.quads(0))
         n_emit = sum(1 for e in opt.elements if e.get("light_emission"))
@@ -1084,6 +1128,8 @@ class ResourcePack:
     def _replace_vanilla(self, asset, target: str, info: dict) -> str:
         """Remplace l'apparence d'un bloc/item vanilla SANS propriétés (stone, dirt, iron_ore…)
         pour tester tout de suite en jeu."""
+        if isinstance(asset, Multipart):
+            raise ExportError(f"{asset.name} : --replace ne s'applique pas à un Multipart (blockstate à propriétés)")
         if isinstance(asset, MultiBlock):
             raise ExportError(f"{asset.name} : --replace ne s'applique pas à un MultiBlock (plusieurs blocs) ; "
                               "utiliser le datapack de placement, ou un mod (python -m pixvox mod …)")
@@ -1222,7 +1268,7 @@ class ResourcePack:
 
 
 # ============================================================================ export d'une liste d'assets
-KINDS_EN = {"bloc": "block", "modèle": "model", "multibloc": "multiblock", "item": "item"}
+KINDS_EN = {"bloc": "block", "modèle": "model", "multibloc": "multiblock", "item": "item", "multipart": "multipart"}
 NAMESPACE_RE = re.compile(r"[a-z0-9_.-]+")
 
 
@@ -1246,6 +1292,8 @@ def export_line(info: dict) -> str:
         b = info["blocks"]
         extra = (f", {b[0]}x{b[1]}x{b[2]} blocs, {info['parts']} parties, {info['elements']} éléments "
                  f"(max {info['elements_max']}/partie), atlas {info['texture_size']}px")
+    elif info["kind"] == "multipart":
+        extra = f", {info['parts']} parties, {info['models']} modèles, {info['states']} états vérifiés"
     elif info["kind"] == "bloc":
         extra = f", textures : {info['layout']}"
     if info.get("animated"):
