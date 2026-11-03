@@ -947,11 +947,13 @@ class ResourcePack:
         states = mp.states()
         for _, state in states:
             expected = mp.state_quads(state)
+            read = loader.blockstate_quads(f"{self.ns}:{mp.name}", state)
             if expected:
-                d = self.verify(None, expected, views=(INVENTORY, BACK, (135, 25)),
-                                quads=loader.blockstate_quads(f"{self.ns}:{mp.name}", state))
+                d = self.verify(None, expected, views=(INVENTORY, BACK, (135, 25)), quads=read)
                 diff["diff_px"] += d["diff_px"]
                 diff["views"] += d["views"]
+            elif read:
+                diff["diff_px"] += len(read)                     # état vide attendu : rien ne doit s'afficher
         for case in mp.blockstate(self.ns)["multipart"]:                 # chaque modèle cité, même vide
             res = loader.resolve(case["apply"]["model"])
             for ref in res["textures"].values():
