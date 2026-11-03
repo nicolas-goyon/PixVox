@@ -1225,7 +1225,7 @@ class ResourcePack:
                   "", "Textures animées : chaque bande PNG a son .png.mcmeta (frametime en ticks, 20 = 1 s).", ""]
         if legacy:
             lines += ["Vrais blocs (collision, lumière, particules) : un mod NeoForge 1.21.1 qui reprend assets/"
-                      f"{self.ns}/", "  (modèles, textures, blockstates, models/item) ; `pixvox mod` produit des mods 26.3."]
+                      f"{self.ns}/", "  (modèles, textures, blockstates, models/item), ou `pixvox mod --loader neoforge --mc 1.21.1`."]
         else:
             lines += ["Vrais blocs (collision, lumière, particules, multiblocs posables) : générer un mod",
                       "  python -m pixvox mod mes_assets.py --modid mon_mod --loader fabric|neoforge --build"]

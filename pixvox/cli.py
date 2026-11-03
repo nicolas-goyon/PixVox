@@ -326,22 +326,22 @@ def _junit_results(project: Path) -> dict | None:
 
 def cmd_mod(args, out) -> int:
     from .export import ExportError
-    from .mod import FABRIC, build_mod, export_mod, find_java, java_version
+    from .mod import build_mod, export_mod, find_java, java_version, required_java
     project = Path(args.out or f"out/mod_{args.modid}_{args.loader}")
     _check_outputs(args.files, project)
     pairs = _load_many(args.files)
     try:
         res = export_mod([a for _, a in pairs], project, args.modid, args.name, loader=args.loader,
                          version=args.version, authors=tuple(args.author) or ("pixvox",), zip_path=args.zip,
-                         build=False, java_home=args.java_home)
+                         build=False, java_home=args.java_home, mc=args.mc)
     except OutputDirError as e:
         raise CliError(str(e), type="output_dir") from e
     except ExportError as e:                       # (sous-classe de ValueError : à tester en premier)
         raise CliError(f"REFUSÉ — {e} (aucun fichier modifié)", type="refused", code=EXIT_FAILED) from e
     except ValueError as e:
         raise CliError(f"REFUSÉ — {e} (aucun fichier modifié)", type="usage") from e
-    out.update({"project": res["project"], "loader": args.loader, "modid": args.modid, "zip": res.get("zip"),
-                "jar": None, "build": None})
+    out.update({"project": res["project"], "loader": args.loader, "modid": args.modid, "mc": args.mc,
+                "zip": res.get("zip"), "jar": None, "build": None})
     out["assets"] = _export_entries(pairs, res["assets"])
     out["errors"] += _verification_errors(out["assets"])
     out["warnings"] += [f"{e['name']} : {w}" for e in out["assets"] for w in e["warnings"]]
@@ -350,11 +350,12 @@ def cmd_mod(args, out) -> int:
         jh = find_java(args.java_home)
         build = {"java_home": jh, "java_version": java_version(jh), "log": project / "build_log.txt"}
         out["build"] = build
-        if jh is None or (build["java_version"] or FABRIC["java"]) < FABRIC["java"]:
-            raise CliError(f"JDK {FABRIC['java']} requis pour --build (trouvé : {build['java_version'] or 'aucun'}) ; "
+        need = required_java(args.mc)
+        if jh is None or (build["java_version"] or need) < need:
+            raise CliError(f"JDK {need} requis pour --build (trouvé : {build['java_version'] or 'aucun'}) ; "
                            "--java-home ou JAVA_HOME", type="environment")
         try:
-            out["jar"] = build_mod(project, jh)
+            out["jar"] = build_mod(project, jh, java=need)
             build["ok"] = True
         except RuntimeError as e:
             build["ok"] = False
@@ -447,7 +448,7 @@ def cmd_doctor(args, out) -> int:
     import numpy
     import PIL
 
-    from .mod import FABRIC, find_java, java_version
+    from .mod import FABRIC, MOD_TARGETS, find_java, java_version, required_java
     jh = find_java(args.java_home)
     jv = java_version(jh)
     need = FABRIC["java"]
@@ -461,12 +462,16 @@ def cmd_doctor(args, out) -> int:
                         "reason": "JDK trouvé" if java_ok else
                         (f"JDK {jv} trop ancien" if jv else "aucun JDK (--java-home, JAVA_HOME ou java dans le PATH)")
                         + ("" if java_ok else f" : `pixvox mod --build` exige un JDK {need} et l'accès réseau à "
-                                               "Maven (Fabric, NeoForge, Maven Central)")}
+                                               "Maven (Fabric, NeoForge, Maven Central)"),
+                        "targets": {mc: {"java": required_java(mc), "possible": jv is not None and jv >= required_java(mc)}
+                                    for mc in MOD_TARGETS}}
     out["selftest"] = _selftest()
     say(f"pixvox {__version__} — Python {platform.python_version()} ({platform.system()}), numpy "
           f"{numpy.__version__}, Pillow {PIL.__version__}")
     say(f"auto-test d'export : {'OK' if out['selftest']['ok'] else 'ÉCHEC'} ({out['selftest']['seconds']} s)")
     say(f"mods (--build) : {'possible' if java_ok else 'impossible'} — {out['mod_build']['reason']}")
+    legacy = out["mod_build"]["targets"]["1.21.1"]
+    say(f"mods 1.21.1 (--mc 1.21.1 --build) : {'possible' if legacy['possible'] else 'impossible'} — JDK {legacy['java']} requis")
     if not out["selftest"]["ok"]:
         out["errors"].append({"type": "selftest", "message": "l'export de test ne se vérifie pas (0 px attendu)"})
         return EXIT_FAILED
@@ -552,13 +557,15 @@ def build_parser() -> argparse.ArgumentParser:
     md.add_argument("files", nargs="+")
     md.add_argument("--modid", default="pixvox_mod", help="identifiant du mod (minuscules, chiffres, _)")
     md.add_argument("--loader", default="fabric", choices=("fabric", "neoforge"), help="chargeur de mods")
+    md.add_argument("--mc", default="26.3", choices=("26.3", "1.21.1"),
+                    help="version de Minecraft : 26.3 (défaut, JDK 25) ou 1.21.1 (--loader neoforge, JDK 21)")
     md.add_argument("--name", help="nom affiché du mod")
     md.add_argument("--out", help="DOSSIER du projet (défaut : out/mod_<modid>_<loader>)")
     md.add_argument("--version", default="1.0.0", help="version du mod")
     md.add_argument("--author", action="append", default=[], help="auteur (répétable)")
     md.add_argument("--zip", help="FICHIER .zip des sources du projet")
     md.add_argument("--build", action="store_true", help="compiler avec Gradle (JDK 25 + réseau Maven requis)")
-    md.add_argument("--java-home", help="dossier du JDK 25 (sinon JAVA_HOME ou java du PATH)")
+    md.add_argument("--java-home", help="dossier du JDK (25, ou 21 avec --mc 1.21.1 ; sinon JAVA_HOME ou java du PATH)")
     c = add("compare", "variantes côte à côte")
     c.add_argument("files", nargs="+")
     c.add_argument("--out", default="out/compare.png", help="FICHIER image produit")

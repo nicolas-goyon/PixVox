@@ -142,7 +142,10 @@ Minecraft n'anime que les **textures** (bande verticale d'images + `.png.mcmeta`
 - Export : faces fixes → atlas `#0`, faces animées → atlas animé `#1`, plans → `#p0, #p1…` ; vérification
   à chaque début d'image (relit le `.mcmeta`).
 
-## Export en mod (Fabric ou NeoForge, Minecraft 26.3, Java 25)
+## Export en mod (Fabric ou NeoForge, Minecraft 26.3, Java 25 ; NeoForge 1.21.1, Java 21)
+
+`--mc 1.21.1` (`export_mod(…, mc="1.21.1")`) exige `--loader neoforge` : mêmes fonctions qu'en 26.3, ressources
+de l'export 1.21.1, tables de butin au format 1.21.1, JDK 21. Les indications 26.3 ci-dessous valent sinon.
 
 ```python
 m.props = Props(strength=3.5, sound="lantern", light=15, tool="pickaxe", tier=None, requires_tool=False,
@@ -302,7 +305,7 @@ perlin(shape, cells=4, seed=0, octaves=1)   # shape 2D, 3D… ou 4D (x, y, z, te
   signalée par une ligne ATTENTION) et listé dans
   `README_pixvox.txt` ; `--replace` écrit `models/item/<bloc>.json`.
 - Dans un mod NeoForge 1.21.1 : copier `assets/<ns>/` (modèles, textures, blockstates, `models/item`) dans
-  les ressources du mod. `pixvox mod` produit des mods 26.3.
+  les ressources du mod, ou `pixvox mod --loader neoforge --mc 1.21.1` (JDK 21) pour générer le mod.
 
 ## Tester en jeu
 

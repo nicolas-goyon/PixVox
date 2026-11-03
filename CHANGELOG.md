@@ -20,6 +20,11 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; ve
   rotation de `facing` sur chaque partie, modèle vide (`Part.empty`), modèle d'objet choisi avec `display`.
   La vérification relit le blockstate (jusqu'à 16 ensembles de parties, le plus grand dans chaque
   direction) ; la planche les montre. Nouveau `kind` JSON : `multipart`. `pixvox mod` refuse ce type d'asset (code 1).
+  La vérification relit le blockstate pour chaque ensemble de parties et chaque direction ; la planche les
+  montre. Nouveau `kind` JSON : `multipart`. `pixvox mod` refuse ce type d'asset (code 1).
+- Mods NeoForge pour Minecraft 1.21.1 : `pixvox mod … --loader neoforge --mc 1.21.1`, `export_mod(…, mc="1.21.1")`
+  (#20). NeoForge 21.1, JDK 21, ressources et tables de butin au format 1.21.1, mêmes fonctions qu'en 26.3.
+  Le résultat JSON indique `mc` ; `pixvox doctor` dit dans `mod_build.targets` quel JDK chaque cible exige.
 - `pixvox.mcmodel` lit les fichiers comme 1.21.1 (`ModelLoader(mc="1.21.1")`, `render-model --mc 1.21.1`) :
   `neoforge_data`, couche de rendu de `render_type`, champs inconnus de 1.21.1 ignorés comme le fait le
   jeu, modèles que le jeu refuse (`forge_data`, rotation interdite) signalés.

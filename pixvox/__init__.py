@@ -94,8 +94,9 @@ def verified(info):
 
 
 def export_mod(assets, out="out/mod", modid="pixvox_mod", name=None, **kw):
-    """Projet de mod Minecraft 26.3 (loader="fabric" ou "neoforge") : vrais blocs (formes, lumière,
-    particules, multiblocs posables). build=True compile le .jar (JDK 25). Voir pixvox.mod.export_mod."""
+    """Projet de mod Minecraft 26.3 (loader="fabric" ou "neoforge"), ou 1.21.1 (mc="1.21.1", NeoForge) : vrais
+    blocs (formes, lumière, particules, multiblocs posables). build=True compile le .jar (JDK 25, ou 21 pour
+    1.21.1). Voir pixvox.mod.export_mod."""
     from .mod import export_mod as _export_mod
     return _export_mod(assets, out, modid, name, **kw)
 

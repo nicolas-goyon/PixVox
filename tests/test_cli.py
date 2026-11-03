@@ -80,6 +80,11 @@ def test_json_contract_and_exit_codes():
         code, d = _cli("render-model", str(tmp / "p121"), "pixvox:block/peb", "--mc", "1.21.1",
                        "--out", str(tmp / "rm121.png"), cwd=tmp)
         assert code == EXIT_OK and d["quads"] > 0 and d["missing"] == []
+        code, d = _cli("mod", good, "--modid", "demo", "--loader", "fabric", "--mc", "1.21.1", cwd=tmp)
+        assert code == EXIT_USAGE and "NeoForge" in d["errors"][0]["message"]
+        code, d = _cli("mod", good, "--modid", "demo", "--loader", "neoforge", "--mc", "1.21.1",
+                       "--out", str(tmp / "m"), cwd=tmp)
+        assert code == EXIT_OK and d["mc"] == "1.21.1" and d["loader"] == "neoforge", d["errors"]
         code, d = _cli("export", good, "--mc", "1.20.1", cwd=tmp)
         assert code == EXIT_USAGE and d["errors"][0]["type"] == "usage" and "1.21.1" in d["errors"][0]["message"]
         # modèle refusé par le jeu (48 unités de haut > 32) : code 1, les autres sont exportés
@@ -135,6 +140,7 @@ def test_doctor_and_summary():
         code, d = run(["doctor", "--json"])
         assert code == EXIT_OK and d["selftest"]["ok"] and d["python"]["ok"]
         assert isinstance(d["mod_build"]["possible"], bool)
+        assert d["mod_build"]["targets"]["1.21.1"]["java"] == 21
         f = _write(tmp, "a.py", ASSETS)
         code, d = run(["export", f, "--pack", str(tmp / "pack"), "--json"])
         res = tmp / "result.json"
