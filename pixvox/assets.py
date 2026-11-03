@@ -405,7 +405,7 @@ class Model(Asset, _Animated):
         """Géométrie de rendu au tick donné : faces des voxels (+ émission) et plans texturés."""
         from .render import plane_quads, quads_from_volume
         q = quads_from_volume(self.volume_at(tick), offset=self.origin, voxel_size=self.voxel_size,
-                              emissive=self.emissive, emission=self.emission)
+                              emissive=self.emissive, emission=self.emission, geometry=self.frames[0])
         for p in self.planes:
             q += plane_quads(p.center, p.y, p.width, p.height, p.angle, p.texture_at(tick), p.emission, p.shade)
         return q
@@ -499,7 +499,7 @@ class MultiBlock(Asset, _Animated):
         """Géométrie de rendu de l'objet entier au tick donné."""
         from .render import quads_from_volume
         return quads_from_volume(self.volume_at(tick), voxel_size=self.voxel_size, emissive=self.emissive,
-                                 emission=self.emission)
+                                 emission=self.emission, geometry=self.frames[0])
 
     def cells(self) -> list:
         """Cellules (bx, by, bz) contenant au moins un voxel plein."""

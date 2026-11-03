@@ -339,3 +339,22 @@ def test_opaque_volume_keeps_its_faces():
     v = marked_volume()
     for face in ("up", "down", "north", "south", "west", "east"):
         assert (v.m_visible(face) == v.m_exposed(face)).all()
+
+
+def test_alpha_animation_keeps_the_geometry_of_the_first_frame():
+    """La géométrie ne s'anime pas : un voxel qui devient semi-transparent n'ouvre pas de face derrière lui."""
+    def opaque():
+        v = Volume(16, 16, 16)
+        v.set(None, "#888888")
+        return v
+    faded = opaque()
+    faded.set(faded.m_box(0, 15, 0, 15, 15, 15), (136, 136, 136, 128))
+    with tmpdir() as tmp:
+        model = ResourcePack(tmp / "m").add(Model("fondu", [opaque(), faded], frametime=4))
+        assert model["verify"]["diff_px"] == 0
+        tall, tall_faded = Volume(16, 32, 16), Volume(16, 32, 16)
+        tall.set(None, "#888888")
+        tall_faded.set(None, "#888888")
+        tall_faded.set(tall_faded.m_box(4, 31, 4, 4, 31, 4), (136, 136, 136, 100))
+        multi = ResourcePack(tmp / "b").add(MultiBlock("fondu", [tall, tall_faded], frametime=4))
+        assert multi["verify"]["diff_px"] == 0

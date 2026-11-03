@@ -370,7 +370,7 @@ def _build(datas, vol, boxes, voxel_size, origin, emission: int = 15):
 def _opacity_groups(datas, solid):
     """Masques (semi-transparent, opaque) d'un volume qui mélange les deux, sinon None. Une boîte ne doit pas
     les réunir : le voxel opaque enfermé dans une boîte translucide n'aurait plus de face."""
-    semi = solid & (datas[..., 3] < 255).any(axis=0)
+    semi = solid & (datas[0, ..., 3] < 255)              # géométrie de la 1re image, comme le rendu de référence
     return (semi, solid & ~semi) if semi.any() and (solid & ~semi).any() else None
 
 
