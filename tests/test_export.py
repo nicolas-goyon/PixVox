@@ -366,3 +366,39 @@ def test_verified_is_public():
     assert pixvox.verified(info)
     assert not pixvox.verified({**info, "verify": {**info["verify"], "diff_px": 1}})
     assert not pixvox.verified({**info, "verify": {**info["verify"], "missing": ["x"]}})
+
+
+def test_texture_folders_layout():
+    """Un dossier par modèle, avec animation, plans, surcouche et noms dont l'un commence par l'autre."""
+    glow = marked_volume()
+    bowl = Volume(8, 4, 8)
+    bowl.set(None, "#555560")
+    plane_model = Model("brazier", bowl)
+    plane_model.add_plane(Sprite.from_ascii("##\n##", {"#": "#ff8800"}), center=(8, 8), y=0, width=8, height=8, angle=0)
+    lit = animated_model()
+    lit.name = "brazier_lit"
+    assets = [plane_model, lit, Block("ore", glow, emissive=glow.m_box(0, 0, 0, 3, 3, 3)),
+              MultiBlock("statue", pillar_volume())]
+    for mc in ("1.21.4+", "1.21.1"):
+        with tmpdir() as tmp:
+            res = export_assets(assets, tmp / "pack", mc=mc, textures="folders", log=None)
+            assert res["textures"] == "folders" and not res["refused"], res["refused"]
+            assert all(verified(i) for i in res["infos"]), mc
+            base = tmp / "pack/assets/pixvox"
+            names = {p.relative_to(base / "textures/block").as_posix() for p in (base / "textures/block").rglob("*.png")}
+            assert {"brazier/atlas.png", "brazier/p0.png", "brazier_lit/anim.png", "statue/atlas.png",
+                    "statue/mini.png"} <= names, names
+            assert all("/" in n for n in names), names
+            assert (base / "textures/block/brazier_lit/anim.png.mcmeta").exists()
+            model = json.loads((base / "models/block/brazier.json").read_text(encoding="utf-8"))
+            assert model["textures"]["0"] == "pixvox:block/brazier/atlas"
+
+
+def test_unknown_texture_layout_is_refused():
+    with tmpdir() as tmp:
+        try:
+            export_assets([], tmp / "pack", textures="zip", log=None)
+        except ValueError as e:
+            assert "zip" in str(e)
+        else:
+            raise AssertionError("rangement inconnu accepté")

@@ -290,9 +290,11 @@ def cmd_export(args, out) -> int:
     pack = Path(args.pack)
     _check_outputs(args.files, pack, pack.parent / f"{pack.name}_datapack")
     pairs = _load_many(args.files)
-    res = export_assets([a for _, a in pairs], args.pack, args.ns, args.zip, _replacements(args.replace), mc=args.mc)
+    res = export_assets([a for _, a in pairs], args.pack, args.ns, args.zip, _replacements(args.replace), mc=args.mc,
+                        textures=args.textures)
     out.update({"pack": res["pack"], "zip": res["zip"], "datapack": res["datapack"],
-                "datapack_zip": res["datapack_zip"], "namespace": args.ns, "mc": res["mc"]})
+                "datapack_zip": res["datapack_zip"], "namespace": args.ns, "mc": res["mc"],
+                "textures": res["textures"]})
     out["assets"] = _export_entries(pairs, res["infos"])
     files = {a.name: f for f, a in pairs}
     out["refused"] = [{"name": n, "file": Path(files[n]).as_posix(), "message": m} for n, m in res["refused"]]
@@ -542,6 +544,9 @@ def build_parser() -> argparse.ArgumentParser:
     e.add_argument("--mc", default=MC_TARGETS[0], choices=MC_TARGETS,
                    help="version de Minecraft visée : 1.21.4+ (défaut, 1.21.4 → 26.3) ou 1.21.1 (NeoForge 21.1 : "
                         "models/item, neoforge_data, render_type)")
+    e.add_argument("--textures", default="flat", choices=("flat", "folders"),
+                   help="rangement des textures de blocs : flat (défaut, <modèle>_glow.png) ou folders (un dossier "
+                        "par modèle : <modèle>/atlas.png, <modèle>/glow.png…)")
     md = add("mod", "projet de mod Fabric ou NeoForge 26.3 (vrais blocs) ; --build compile le .jar")
     md.add_argument("files", nargs="+")
     md.add_argument("--modid", default="pixvox_mod", help="identifiant du mod (minuscules, chiffres, _)")
