@@ -172,16 +172,17 @@ def _shade_factor(q: Quad, R: np.ndarray, shading: str) -> float:
 
 def _blend_translucent(img, zbuf, ys, xs, depth, margin, rgb, a) -> None:
     """Mélange les fragments semi-transparents devant le z-buffer, pixel par pixel, du plus loin au plus
-    proche. À même pixel et même profondeur, un fragment couvert par la seule tolérance anti-trous (arête
-    de deux quads voisins) est ignoré ; une surcouche, qui couvre vraiment le pixel, reste dessinée après."""
-    keep = depth >= zbuf[ys, xs] - 1e-7
+    proche. Un fragment couvert par la seule tolérance anti-trous (hors du quad) est ignoré, à toute
+    profondeur : sinon l'image dépendrait du découpage. Une surcouche, qui couvre vraiment le pixel, reste
+    dessinée après ce qu'elle recouvre."""
+    keep = (depth >= zbuf[ys, xs] - 1e-7) & (margin >= -1e-9)
     ys, xs, depth, margin, rgb, a = ys[keep], xs[keep], depth[keep], margin[keep], rgb[keep], a[keep]
     level = np.round(depth * 1e6)
     order = np.lexsort((-margin, level, xs, ys))             # stable : à égalité, ordre de dessin
     ys, xs, level, margin, rgb, a = ys[order], xs[order], level[order], margin[order], rgb[order], a[order]
     same = (ys[1:] == ys[:-1]) & (xs[1:] == xs[:-1]) & (level[1:] == level[:-1])
     keep = np.ones(ys.shape, bool)
-    keep[1:] = ~(same & (margin[1:] < 0))
+    keep[1:] = ~(same & (margin[1:] < 0))                    # arête exacte de deux quads voisins
     ys, xs, rgb, a = ys[keep], xs[keep], rgb[keep], a[keep]
     new_pixel = np.ones(ys.shape, bool)
     new_pixel[1:] = (ys[1:] != ys[:-1]) | (xs[1:] != xs[:-1])
@@ -354,10 +355,13 @@ def _rects(mask: np.ndarray) -> list:
     return out
 
 
-def quads_from_volume(vol, offset=(0, 0, 0), voxel_size: float = 1.0, emissive=None, emission: int = 15) -> list:
+def quads_from_volume(vol, offset=(0, 0, 0), voxel_size: float = 1.0, emissive=None, emission: int = 15,
+                      geometry=None) -> list:
     """Rendu exact d'un volume : pour chaque direction et chaque couche, les faces de voxels visibles
     (voisin vide, ou voxel opaque derrière un voxel semi-transparent) regroupées en rectangles texturés. C'est la référence « vérité terrain ».
-    emissive : masque des voxels lumineux (leurs faces reçoivent emission, visible en vue 'night')."""
+    emissive : masque des voxels lumineux (leurs faces reçoivent emission, visible en vue 'night').
+    geometry : volume qui décide des faces visibles (la 1re image d'une animation : dans le jeu, la
+    géométrie ne s'anime pas) ; par défaut `vol`."""
     from .volume import face_coords
     sx, sy, sz = vol.shape
     off = np.asarray(offset, float)
@@ -365,7 +369,7 @@ def quads_from_volume(vol, offset=(0, 0, 0), voxel_size: float = 1.0, emissive=N
     for f in FACES:
         lax, lside, *_ = FACE_AXES[f]
         a = AXIS[lax]
-        exposed = vol.m_visible(f)
+        exposed = (vol if geometry is None else geometry).m_visible(f)
         for layer in range(vol.shape[a]):
             lo = [0, 0, 0]
             hi = [sx, sy, sz]
