@@ -224,7 +224,8 @@ asset.props = Props(...)   asset.quads(tick)   asset.volume_at(tick)
 
 review(asset, out_dir="out")   animate(asset, out_dir)   compare([a, b], "out/cmp.png", size=300)
 view(asset, yaw, pitch, size=600, shading="gui"|"world"|"night"|"flat", out_dir="out", persp=0.0, tick=0)
-export_pack([...], root="out/pack", namespace="pixvox", zip_path=None, replace={"nom": "minecraft:stone"})
+export_pack([...], root="out/pack", namespace="pixvox", zip_path=None, replace={"nom": "minecraft:stone"},
+            textures="flat")   # ou "folders" : textures/block/<modèle>/atlas.png ; verified(info) : export fidèle
 export_mod([...], out, modid, name=None, *, loader="fabric", build=False, java_home=None, zip_path=None)
 perlin(shape, cells=4, seed=0, octaves=1)   # shape 2D, 3D… ou 4D (x, y, z, temps) : périodique partout
 ```

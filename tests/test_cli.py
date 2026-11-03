@@ -72,6 +72,10 @@ def test_json_contract_and_exit_codes():
         code, d = _cli("export", good, "--pack", str(tmp / "p121"), "--mc", "1.21.1", cwd=tmp)
         assert code == EXIT_OK and d["mc"] == "1.21.1" and all(x["verified"] for x in d["assets"]), d["errors"]
         assert not (tmp / "p121/assets/pixvox/items").exists()
+        assert d["textures"] == "flat"
+        code, d = _cli("export", good, "--pack", str(tmp / "dirs"), "--textures", "folders", cwd=tmp)
+        assert code == EXIT_OK and d["textures"] == "folders" and all(x["verified"] for x in d["assets"]), d["errors"]
+        assert list((tmp / "dirs/assets/pixvox/textures/block/blk").glob("*.png"))
         assert (tmp / "p121/assets/pixvox/models/item/blk.json").exists()
         code, d = _cli("render-model", str(tmp / "p121"), "pixvox:block/peb", "--mc", "1.21.1",
                        "--out", str(tmp / "rm121.png"), cwd=tmp)

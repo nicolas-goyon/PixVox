@@ -67,18 +67,20 @@ def analyze(asset):
 
 
 def export_pack(assets, root="out/pack", namespace="pixvox", zip_path=None, replace=None,
-                description="Créé avec pixvox", mc=None):
+                description="Créé avec pixvox", mc=None, textures="flat"):
     """Écrit un resource pack Java et vérifie chaque asset par re-rendu.
 
     replace : dict {nom_asset: "minecraft:stone"} pour remplacer l'apparence d'un bloc/item vanilla
               sans propriétés (test immédiat en jeu sans mod).
     mc      : version de Minecraft visée, "1.21.4+" (défaut : 1.21.4 → 26.3) ou "1.21.1" (NeoForge 21.1 :
               models/item, lumière en neoforge_data, render_type ; les fichiers vérifiés sont ceux de 1.21.1).
+    textures : rangement des textures de blocs, "flat" (défaut : textures/block/<modèle>_glow.png) ou
+              "folders" (un dossier par modèle : textures/block/<modèle>/atlas.png, glow.png…).
     Lève ExportError si un asset est refusé (les autres sont exportés) ; renvoie les infos d'export
     (verified(info) : export fidèle, 0 pixel d'écart et aucune texture manquante).
     """
     from .export import ExportError, export_assets
-    res = export_assets(assets, root, namespace, zip_path, replace, description, mc=mc)
+    res = export_assets(assets, root, namespace, zip_path, replace, description, mc=mc, textures=textures)
     if res["refused"]:
         raise ExportError(f"{len(res['refused'])} asset(s) refusé(s), absents du pack : "
                           + " | ".join(m for _, m in res["refused"]))

@@ -8,6 +8,9 @@ Disposition produite (namespace `pixvox` par défaut) :
   assets/<ns>/blockstates/<nom>.json              pour un mod qui enregistre le bloc <ns>:<nom>
   assets/<ns>/items/<nom>.json                    définition d'item (1.21.4+) -> composant item_model
 
+Rangement textures="folders" : un dossier par modèle, assets/<ns>/textures/block/<nom>/atlas.png (texture
+principale), glow.png, anim.png, p0.png, top.png… Les références des modèles et la vérification suivent.
+
 Cible 1.21.1 (mc="1.21.1", NeoForge 21.1) : pas de dossier items/ mais models/item/<nom>.json (parent :
 le modèle du bloc), lumière des éléments en neoforge_data, render_type dès qu'une face a de la
 transparence (surcouche lumineuse comprise), rotations limitées à -45 … 45 par pas de 22,5°, et le
@@ -100,6 +103,9 @@ TARGETS = {
 DEFAULT_MC = "1.21.4+"
 CARRIER = "paper"        # 1.21.1 : item vanilla qui porte les modèles par custom_model_data (tests sans mod)
 CARRIER_MODEL = {"parent": "minecraft:item/generated", "textures": {"layer0": "minecraft:item/paper"}}
+
+
+TEXTURE_LAYOUTS = ("flat", "folders")
 
 
 def target(mc: str | None = None) -> Target:
@@ -657,9 +663,14 @@ def glow_textures(block: Block) -> tuple[dict, dict]:
     return f2s, textures
 
 
+def texture_name(name: str, suffix: str = "", layout: str = "flat") -> str:
+    """Nom de texture d'un modèle : <nom><suffixe> (flat) ou <nom>/<suffixe sans _>, atlas si vide (folders)."""
+    return f"{name}/{suffix.lstrip('_') or 'atlas'}" if layout == "folders" else f"{name}{suffix}"
+
+
 def cube_model_json(ns: str, name: str, face_to_suffix: dict, glow_to_suffix: dict | None = None,
-                    emission: int = 15) -> dict:
-    tex = {f: f"{ns}:block/{name}{face_to_suffix[f]}" for f in FACES}
+                    emission: int = 15, layout: str = "flat") -> dict:
+    tex = {f: f"{ns}:block/{texture_name(name, face_to_suffix[f], layout)}" for f in FACES}
     tex["particle"] = tex["north"]
     elements = [{
         "from": [0, 0, 0], "to": [16, 16, 16],
@@ -668,7 +679,8 @@ def cube_model_json(ns: str, name: str, face_to_suffix: dict, glow_to_suffix: di
     if glow_to_suffix:
         # surcouche aux mêmes coordonnées (comme le liseré de l'herbe vanilla), dessinée par-dessus,
         # pleinement éclairée : les pixels lumineux restent visibles dans le noir
-        tex.update({f"{f}_glow": f"{ns}:block/{name}_glow{suf}" for f, suf in glow_to_suffix.items()})
+        tex.update({f"{f}_glow": f"{ns}:block/{texture_name(name, '_glow' + suf, layout)}"
+                    for f, suf in glow_to_suffix.items()})
         elements.append({"from": [0, 0, 0], "to": [16, 16, 16], "light_emission": int(emission),
                          "faces": {f: {"uv": [0, 0, 16, 16], "texture": f"#{f}_glow", "cullface": f}
                                    for f in FACES if f in glow_to_suffix}})
@@ -686,11 +698,15 @@ def dumps(obj) -> str:
 
 class ResourcePack:
     """Resource pack en cours d'écriture. mc : version de Minecraft visée ("1.21.4+" par défaut, ou
-    "1.21.1"), voir TARGETS ; min_format / max_format remplacent ceux de la cible."""
+    "1.21.1"), voir TARGETS ; min_format / max_format remplacent ceux de la cible. textures : rangement
+    des textures de blocs, "flat" (défaut, préfixe du nom du modèle) ou "folders" (un dossier par modèle)."""
 
     def __init__(self, root, namespace: str = "pixvox", description: str = "Créé avec pixvox",
                  min_format: int | None = None, max_format: int | None = None, mod_mode: bool = False,
-                 mc: str | None = None):
+                 mc: str | None = None, textures: str = "flat"):
+        if textures not in TEXTURE_LAYOUTS:
+            raise ValueError(f"textures={textures!r} inconnu : {', '.join(TEXTURE_LAYOUTS)}")
+        self.layout = textures
         self.root = Path(root)
         self.ns = namespace
         self.description = description
@@ -716,6 +732,10 @@ class ResourcePack:
 
     def _png(self, path: Path, arr: np.ndarray) -> None:
         Image.fromarray(np.asarray(arr, np.uint8), "RGBA").save(path)
+
+    def _block_texture(self, name: str, suffix: str, tex, timing=None) -> str:
+        """Texture de bloc du modèle `name`, rangée selon self.layout."""
+        return self._texture("block", texture_name(name, suffix, self.layout), tex, timing)
 
     def _texture(self, kind: str, name: str, tex, timing=None) -> str:
         """Écrit textures/<kind>/<name>.png, plus <name>.png.mcmeta si la texture est animée.
@@ -851,11 +871,11 @@ class ResourcePack:
     def _add_block(self, b: Block) -> dict:
         f2s, textures = cube_textures(b)
         for suf, t in textures.items():
-            self._texture("block", f"{b.name}{suf}", t)
+            self._block_texture(b.name, suf, t)
         g2s, glow = glow_textures(b)
         for suf, t in glow.items():
-            self._texture("block", f"{b.name}_glow{suf}", t)
-        model = cube_model_json(self.ns, b.name, f2s, g2s, b.emission)
+            self._block_texture(b.name, f"_glow{suf}", t)
+        model = cube_model_json(self.ns, b.name, f2s, g2s, b.emission, self.layout)
         warnings = []
         rt = b.effective_render_type()
         if glow and self.target.layers and rt == "solid":
@@ -911,11 +931,11 @@ class ResourcePack:
                               "22,5°")
         tex = {}
         if opt.atlas is not None:
-            tex["0"] = self._texture("block", m.name, opt.atlas)
+            tex["0"] = self._block_texture(m.name, "", opt.atlas)
         if opt.anim_atlas is not None:
-            tex["1"] = self._texture("block", f"{m.name}_anim", opt.anim_atlas, m.timing)
+            tex["1"] = self._block_texture(m.name, "_anim", opt.anim_atlas, m.timing)
         for var, t in plane_tex.items():
-            tex[var] = self._texture("block", f"{m.name}_{var}", t)
+            tex[var] = self._block_texture(m.name, f"_{var}", t)
         tex["particle"] = tex.get("0") or tex.get("1") or next(iter(tex.values()))
         warnings = []
         if odd:
@@ -955,9 +975,9 @@ class ResourcePack:
         opt = optimize_multiblock(mb)
         tex = {}
         if opt.atlas is not None:
-            tex["0"] = self._texture("block", mb.name, opt.atlas)
+            tex["0"] = self._block_texture(mb.name, "", opt.atlas)
         if opt.anim_atlas is not None:
-            tex["1"] = self._texture("block", f"{mb.name}_anim", opt.anim_atlas, mb.timing)
+            tex["1"] = self._block_texture(mb.name, "_anim", opt.anim_atlas, mb.timing)
         tex["particle"] = tex.get("0") or tex.get("1")
         base = {"parent": "minecraft:block/block", "textures": tex}
         if not mb.ambient_occlusion:
@@ -996,9 +1016,9 @@ class ResourcePack:
         mref = f"{self.ns}:block/{mb.name}"
         mtex = {}
         if opt.miniature.atlas is not None:
-            mtex["0"] = self._texture("block", f"{mb.name}_mini", opt.miniature.atlas)
+            mtex["0"] = self._block_texture(mb.name, "_mini", opt.miniature.atlas)
         if opt.miniature.anim_atlas is not None:
-            mtex["1"] = self._texture("block", f"{mb.name}_mini_anim", opt.miniature.anim_atlas, mb.timing)
+            mtex["1"] = self._block_texture(mb.name, "_mini_anim", opt.miniature.anim_atlas, mb.timing)
         mtex["particle"] = mtex.get("0") or mtex.get("1")
         mini = {"parent": "minecraft:block/block", "textures": mtex, "elements": opt.miniature.elements}
         if rt_mini != "solid":
@@ -1226,20 +1246,24 @@ def export_line(info: dict) -> str:
 
 
 def export_assets(assets, root="out/pack", namespace: str = "pixvox", zip_path=None, replace=None,
-                  description: str = "Créé avec pixvox", log=say, mc: str | None = None) -> dict:
+                  description: str = "Créé avec pixvox", log=say, mc: str | None = None, textures: str = "flat") -> dict:
     """Écrit un resource pack (recréé) et vérifie chaque asset par re-rendu, sans s'arrêter au premier refus.
 
     mc : version de Minecraft visée, "1.21.4+" (défaut : 1.21.4 → 26.3) ou "1.21.1" (NeoForge 21.1).
-    Retourne {"pack", "zip", "datapack", "datapack_zip", "mc", "infos": [...], "refused": [(nom, message)]}.
+    textures : rangement des textures de blocs, "flat" (défaut) ou "folders" (un dossier par modèle).
+    Retourne {"pack", "zip", "datapack", "datapack_zip", "mc", "textures", "infos": [...],
+    "refused": [(nom, message)]}.
     log(ligne) reçoit le journal lisible (affiché par défaut ; None pour se taire).
     """
     log = log or (lambda *_: None)
     if not NAMESPACE_RE.fullmatch(namespace or ""):
         raise ExportError(f"namespace {namespace!r} invalide : minuscules, chiffres, _ . - (Minecraft refuse le reste)")
     t = target(mc)                                   # ValueError si inconnu, avant de toucher au disque
+    if textures not in TEXTURE_LAYOUTS:
+        raise ValueError(f"textures={textures!r} inconnu : {', '.join(TEXTURE_LAYOUTS)}")
     root = prepare_output_dir(root, "dossier du pack")
     mark_output_dir(root)
-    pack = ResourcePack(root, namespace, description, mc=t.mc)
+    pack = ResourcePack(root, namespace, description, mc=t.mc, textures=textures)
     infos, refused = [], []
     for a in assets:
         try:
@@ -1254,5 +1278,5 @@ def export_assets(assets, root="out/pack", namespace: str = "pixvox", zip_path=N
             log(f"[export]   ATTENTION {i['name']} : {w}")
     log(f"[export] pack : {root}" + (f" | zip : {z}" if z else "") + ("" if t.mc == DEFAULT_MC else f" | {t.label}"))
     return {"pack": root, "zip": z, "datapack": pack.datapack, "datapack_zip": pack.datapack_zip, "mc": t.mc,
-            "infos": infos, "refused": refused}
+            "textures": textures, "infos": infos, "refused": refused}
 

@@ -78,7 +78,7 @@ Champs communs :
 ```json
 {
   "pack": "out/pack", "zip": "out/pack.zip", "datapack": null, "datapack_zip": null, "namespace": "pixvox",
-  "mc": "1.21.4+",
+  "mc": "1.21.4+", "textures": "flat",
   "assets": [
     {"name": "lumenite_ore", "kind": "block", "file": "examples/lumenite_ore.py",
      "model": "pixvox:block/lumenite_ore", "verified": true,
@@ -101,6 +101,11 @@ transparence, rotations limitées à -45 … 45° par pas de 22,5 (plan dont l'a
 `assets/minecraft/models/item/paper.json` qui porte chaque modèle par `custom_model_data` (tests sans mod ;
 `details.custom_model_data`). Dans les deux cas, la vérification relit les fichiers comme la version
 visée les lit.
+
+`textures` : rangement des textures de blocs (`--textures`). `flat` (défaut) : `textures/block/<modèle>.png`,
+`<modèle>_glow.png`, `<modèle>_anim.png`… `folders` : un dossier par modèle, `textures/block/<modèle>/atlas.png`,
+`glow.png`, `anim.png`, `p0.png`, `top.png`… Les modèles JSON et la vérification suivent le rangement choisi ; les
+textures d'items restent dans `textures/item/`.
 
 ### `review`
 
