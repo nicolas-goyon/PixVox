@@ -107,6 +107,9 @@ visée les lit.
 `glow.png`, `anim.png`, `p0.png`, `top.png`… Les modèles JSON et la vérification suivent le rangement choisi ; les
 textures d'items restent dans `textures/item/`.
 
+Un asset `multipart` : `details.parts`, `details.models` (fichiers de modèles écrits), `details.states` (états
+du blockstate relus et comparés : jusqu'à 16 ensembles de parties, le plus grand dans chaque direction).
+
 ### `review`
 
 ```json

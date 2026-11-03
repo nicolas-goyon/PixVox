@@ -527,11 +527,16 @@ class MultiBlock(Asset, _Animated):
         return 0.625, (8.0, 8.0, 8.0)
 
 
+def _state_value(value) -> str:
+    """Valeur de propriété telle que le jeu l'écrit : True -> "true", 1 -> "1"."""
+    return str(value).lower() if isinstance(value, bool) else str(value)
+
+
 def _when_value(value) -> str:
     """Valeur de condition au format du jeu : 1 -> "1", [1, 2] ou range(1, 3) -> "1|2"."""
     if isinstance(value, (list, tuple, range)):
-        return "|".join(str(x) for x in value)
-    return str(value)
+        return "|".join(_state_value(x) for x in value)
+    return _state_value(value)
 
 
 def _when_json(when: dict | None) -> dict | None:
@@ -577,7 +582,7 @@ class Multipart(Asset):
                  item: Model | None = None, item_display: dict | None = None, notes: str = ""):
         super().__init__(name, notes)
         self.parts = list(parts)
-        self.properties = {k: [str(x) for x in v] for k, v in (properties or {}).items()}
+        self.properties = {k: [_state_value(x) for x in v] for k, v in (properties or {}).items()}
         self.facing = bool(facing)
         self.models = [p.model for p in self.parts if p.model is not None]
         if not self.models:
@@ -592,6 +597,13 @@ class Multipart(Asset):
             raise ValueError(f"{name} : deux modèles de parties ont le même nom ({names})")
         for p in self.parts:
             self._check_when(p.when)
+            if p.model is None and p.particle not in self.models + [self.item]:
+                raise ValueError(f"{name} : Part.empty({p.empty_name!r}) : particle doit être un modèle de ce Multipart")
+
+    def written_names(self) -> list:
+        """Noms de modèles que cet asset écrit, et le sien (son blockstate)."""
+        names = {self.name, self.item.name} | {m.name for m in self.models}
+        return sorted(names | {p.empty_name for p in self.parts if p.model is None})
 
     def _check_when(self, when: dict | None) -> None:
         when = _when_json(when)
@@ -648,7 +660,9 @@ class Multipart(Asset):
 
     def quads(self, tick: float = 0) -> list:
         """Géométrie de l'état qui affiche le plus de parties."""
-        return self.state_quads(max((s for _, s in self.states()), key=lambda s: len(self.active(s))))
+        def shown(state):
+            return sum(p.model is not None for p in self.active(state))
+        return self.state_quads(max((s for _, s in self.states()), key=shown))
 
     def blockstate(self, ns: str) -> dict:
         """Contenu du blockstate multipart."""

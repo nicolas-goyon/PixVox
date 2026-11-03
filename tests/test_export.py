@@ -475,3 +475,33 @@ def test_multipart_rejects_unknown_property_and_value():
         except ValueError:
             continue
         raise AssertionError(when)
+
+
+def test_multipart_boolean_property_uses_the_game_spelling():
+    v = Volume(4, 4, 4)
+    v.set(None, "#888888")
+    lamp = Multipart("lamp", [Part(Model("lamp_on", v), {"lit": True})], {"lit": [False, True]})
+    assert lamp.blockstate("t")["multipart"][0]["when"] == {"lit": "true"}
+    assert any(len(lamp.active(s)) == 1 for _, s in lamp.states())
+
+
+def test_multipart_model_name_cannot_be_overwritten():
+    v = Volume(4, 4, 4)
+    v.set(None, "#888888")
+    with tmpdir() as tmp:
+        res = export_assets([Multipart("c", [Part(Model("shared", v))]), Model("shared", v)], tmp / "pack", log=None)
+        assert [n for n, _ in res["refused"]] == ["shared"]
+
+
+def test_empty_part_needs_a_particle_from_the_block():
+    v = Volume(4, 4, 4)
+    v.set(None, "#888888")
+    try:
+        Multipart("bad", [Part(Model("a", v)), Part.empty("vide", Model("autre", v), {"open": 1})], {"open": [0, 1]})
+    except ValueError as e:
+        assert "particle" in str(e)
+    else:
+        raise AssertionError("particle étrangère acceptée")
+    base = Model("ok_base", v)
+    mp = Multipart("ok", [Part(base), Part.empty("ok_vide", base, {"open": 1})], {"open": [0, 1]})
+    assert mp.quads(0)
