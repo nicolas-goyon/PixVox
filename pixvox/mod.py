@@ -603,6 +603,23 @@ _RENAMES_1_21_1 = (
 )
 
 
+SOUNDS_NOT_IN_1_21_1 = {"resin_bricks", "iron"}               # absents du jar NeoForge 1.21.1 (compileJava)
+PARTICLES_NOT_IN_1_21_1 = {"FIREFLY", "COPPER_FIRE_FLAME"}
+
+
+def _check_props_1_21_1(a) -> None:
+    """Refuse tout de suite un son ou une particule que 1.21.1 n'a pas : le projet ne compilerait pas."""
+    p = a.props
+    if p is None:
+        return
+    if p.sound.lower() in SOUNDS_NOT_IN_1_21_1:
+        raise ExportError(f"{a.name} : le son {p.sound!r} n'existe pas en Minecraft 1.21.1")
+    bad = PARTICLES_NOT_IN_1_21_1 & set(PARTICLES.get(p.particles) or ())
+    if bad:
+        raise ExportError(f"{a.name} : la particule {p.particles!r} ({', '.join(sorted(bad))}) n'existe pas en Minecraft "
+                          "1.21.1")
+
+
 def _java_1_21_1(txt: str) -> str:
     """Source Java 26.3 -> 1.21.1 : seuls ces noms et signatures diffèrent (vérifiés à la compilation)."""
     for old, new in _RENAMES_1_21_1:
@@ -1217,6 +1234,8 @@ def _write_project(assets, root: Path, final: Path, modid, name, pkg, names, *, 
         if isinstance(a, Multipart):
             raise ExportError(f"{a.name} : pixvox mod ne génère pas encore de Multipart ; l'exporter avec pixvox export "
                               "et enregistrer le bloc et ses propriétés dans le mod")
+        if mc == "1.21.1":
+            _check_props_1_21_1(a)
         infos.append(pack.add(a))           # ExportError si un modèle est invalide pour le jeu : pas de mod bancal
         for w in infos[-1].get("warnings", []):
             say(f"[mod] ATTENTION {a.name} : {w}")
