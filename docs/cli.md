@@ -19,7 +19,7 @@ python -m pixvox …        # équivalent, utile sans installation (depuis un cl
 | `pixvox new NOM [--kind block\|model\|multiblock\|item\|animated] [--dir D]` | fichier d'asset de départ, prêt à modifier | `D/NOM.py` |
 | `pixvox review F.py… [--out D] [--only NOM] [--fail-on never\|warn\|err]` | planche de revue + rapport (+ planche d'animation et GIF) | `D/<nom>.review.png`, `.report.txt`, `.anim.png`, `.anim.gif` |
 | `pixvox export F.py… [--pack D] [--ns NS] [--zip Z] [--replace nom=minecraft:bloc] [--mc 1.21.4+\|1.21.1] [--textures flat\|folders]` | resource pack Java vérifié par re-rendu, pour 1.21.4 → 26.3 (défaut) ou 1.21.1 (NeoForge 21.1) | `D/` (+ `Z`, `D_datapack/` pour les multiblocs) |
-| `pixvox mod F.py… --modid ID [--loader fabric\|neoforge] [--build] [--java-home J] [--zip Z]` | projet de mod Minecraft 26.3 (+ `.jar` avec `--build`) | `out/mod_ID_LOADER/` |
+| `pixvox mod F.py… --modid ID [--loader fabric\|neoforge] [--mc 26.3\|1.21.1] [--build] [--java-home J] [--zip Z]` | projet de mod Minecraft 26.3, ou 1.21.1 avec NeoForge (+ `.jar` avec `--build`) | `out/mod_ID_LOADER/` |
 | `pixvox view F.py --yaw Y --pitch P [--persp 2] [--shading gui\|world\|night\|flat] [--tick T]` | rendu à un angle libre | `out/<nom>.view_Y_P.png` |
 | `pixvox anim F.py…` | images d'une animation + GIF | `out/<nom>.anim.png`, `.anim.gif` |
 | `pixvox compare F.py… [--out IMG]` | variantes côte à côte | `IMG` |
@@ -40,7 +40,7 @@ Le contrat change de numéro (`schema`) quand ses champs changent : `pixvox.resu
 |---|---|---|
 | `0` | réussi | tout est exporté et vérifié |
 | `1` | **vérification échouée** : le travail est fait mais n'est pas bon | écart de rendu après export, asset refusé par les limites du jeu, compilation ou test JUnit du mod en échec, `--fail-on` atteint, textures manquantes (`render-model`) |
-| `2` | **utilisation ou environnement** : rien n'a pu être évalué | fichier absent, `build()` qui lève une exception (ou appelle `sys.exit`), argument invalide (`--ns` hors `[a-z0-9_.-]`, taille ≤ 0…), nom introuvable avec `--only`, dossier de sortie refusé, JDK 25 absent pour `--build` |
+| `2` | **utilisation ou environnement** : rien n'a pu être évalué | fichier absent, `build()` qui lève une exception (ou appelle `sys.exit`), argument invalide (`--ns` hors `[a-z0-9_.-]`, taille ≤ 0…), nom introuvable avec `--only`, dossier de sortie refusé, JDK de la cible absent pour `--build` (25, ou 21 avec `--mc 1.21.1`), `--mc 1.21.1` sans `--loader neoforge` |
 | `3` | erreur interne de pixvox (bogue : la trace est sur la sortie d'erreur) | — |
 
 ## Mode `--json`
@@ -126,7 +126,7 @@ du blockstate relus et comparés : jusqu'à 16 ensembles de parties, le plus gra
 ### `mod`
 
 ```json
-{"project": "out/mod_demo_fabric", "loader": "fabric", "modid": "demo", "zip": null,
+{"project": "out/mod_demo_fabric", "loader": "fabric", "modid": "demo", "mc": "26.3", "zip": null,
  "jar": "out/mod_demo_fabric/build/libs/demo-1.0.0.jar",
  "build": {"java_home": "…", "java_version": 25, "ok": true, "log": "…/build_log.txt",
            "tests": {"tests": 1, "failures": 0, "errors": 0, "skipped": 0, "passed": true}},
@@ -134,7 +134,8 @@ du blockstate relus et comparés : jusqu'à 16 ensembles de parties, le plus gra
 ```
 
 Sans `--build`, `jar` et `build` valent `null`. Le test JUnit généré démarre les registres de
-Minecraft avec le mod (sans ouvrir le jeu) et vérifie chaque bloc.
+Minecraft avec le mod (sans ouvrir le jeu) et vérifie chaque bloc. `mc` : version visée (`--mc`), `26.3`
+(défaut, Fabric ou NeoForge, JDK 25) ou `1.21.1` (NeoForge seulement, JDK 21 ; ressources de `export --mc 1.21.1`).
 
 ### `doctor`
 
@@ -142,7 +143,8 @@ Minecraft avec le mod (sans ouvrir le jeu) et vérifie chaque bloc.
 {"python": {"version": "3.13.1", "ok": true, "required": ">=3.10"},
  "packages": {"pixvox": "0.1.0", "numpy": "2.3.0", "pillow": "11.2.0"},
  "java": {"home": "/opt/java", "version": 25, "required": 25, "ok": true},
- "mod_build": {"possible": true, "reason": "JDK trouvé"},
+ "mod_build": {"possible": true, "reason": "JDK trouvé",
+               "targets": {"26.3": {"java": 25, "possible": true}, "1.21.1": {"java": 21, "possible": true}}},
  "selftest": {"ok": true, "diff_px": 0, "seconds": 0.5}}
 ```
 

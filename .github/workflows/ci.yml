@@ -96,13 +96,16 @@ jobs:
           retention-days: 14
 
   mods:
-    name: mod ${{ matrix.loader }} (Minecraft 26.3, JDK 25)
+    name: mod ${{ matrix.loader }} (Minecraft ${{ matrix.mc }}, JDK ${{ matrix.java }})
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        loader: [fabric, neoforge]
+        include:
+          - {loader: fabric, mc: "26.3", java: "25", id: fabric}
+          - {loader: neoforge, mc: "26.3", java: "25", id: neoforge}
+          - {loader: neoforge, mc: "1.21.1", java: "21", id: neoforge-1.21.1}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -113,7 +116,7 @@ jobs:
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: "25"
+          java-version: ${{ matrix.java }}
       - uses: gradle/actions/setup-gradle@v6
         with:
           add-job-summary: on-failure
@@ -121,7 +124,8 @@ jobs:
       - name: Projet de mod, compilation et test JUnit (registres du jeu chargés, sans ouvrir le jeu)
         run: >
           pixvox mod examples/*.py --modid pixvox_demo --name "Pixvox Demo" --loader ${{ matrix.loader }}
-          --out out/mod_${{ matrix.loader }} --zip out/pixvox_demo_${{ matrix.loader }}_sources.zip --build --json
+          --mc ${{ matrix.mc }} --out out/mod_${{ matrix.id }} --zip out/pixvox_demo_${{ matrix.id }}_sources.zip
+          --build --json
           > mod.json
       - name: Résumé
         if: success() || failure()
@@ -129,12 +133,12 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: success() || failure()
         with:
-          name: mod-${{ matrix.loader }}
+          name: mod-${{ matrix.id }}
           path: |
-            out/mod_${{ matrix.loader }}/build/libs/*.jar
-            out/mod_${{ matrix.loader }}/build_log.txt
-            out/mod_${{ matrix.loader }}/build/test-results/
-            out/pixvox_demo_${{ matrix.loader }}_sources.zip
+            out/mod_${{ matrix.id }}/build/libs/*.jar
+            out/mod_${{ matrix.id }}/build_log.txt
+            out/mod_${{ matrix.id }}/build/test-results/
+            out/pixvox_demo_${{ matrix.id }}_sources.zip
             mod.json
           if-no-files-found: warn
           retention-days: 14

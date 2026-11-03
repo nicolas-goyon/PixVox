@@ -87,3 +87,40 @@ def test_multipart_is_refused_by_mod():
             assert "Multipart" in str(e)
         else:
             raise AssertionError("Multipart accepté par pixvox mod")
+
+
+def test_mod_project_for_1_21_1():
+    a = Block("bloc_test", marked_volume())
+    mb = MultiBlock("pilier", pillar_volume())
+    with tmpdir() as tmp:
+        res = export_mod([a, mb], tmp / "mod", "demo_old", loader="neoforge", mc="1.21.1", quiet=True)
+        assert res["mc"] == "1.21.1" and all(i["verify"]["diff_px"] == 0 for i in res["assets"])
+        root = tmp / "mod"
+        data = root / "src/main/resources"
+        assert (data / "assets/demo_old/models/item/bloc_test.json").exists()
+        assert not (data / "assets/demo_old/items").exists()
+        loot = json.loads((data / "data/demo_old/loot_table/blocks/pilier.json").read_text(encoding="utf-8"))
+        pool = loot["pools"][0]
+        assert pool["conditions"] == [{"condition": "minecraft:survives_explosion"}]
+        assert pool["entries"][0]["conditions"][0]["condition"] == "minecraft:block_state_property"
+        toml = (data / "META-INF/neoforge.mods.toml").read_text(encoding="utf-8")
+        assert 'modLoader="javafml"' in toml and 'versionRange="[1.21.1]"' in toml
+        assert "of(21)" in (root / "build.gradle").read_text(encoding="utf-8")
+        assert "neo_version=21.1." in (root / "gradle.properties").read_text(encoding="utf-8")
+        java = "\n".join(p.read_text(encoding="utf-8") for p in (root / "src").rglob("*.java"))
+        for gone in ("Identifier", "ScheduledTickAccess", "IMMOVEABLE", "noCollision", "ITEM.getValue", "BLOCK.getValue"):
+            assert gone not in java, gone
+        assert "ResourceLocation.fromNamespaceAndPath" in java and "LevelAccessor level, BlockPos pos" in java
+
+
+def test_mod_1_21_1_is_neoforge_only():
+    from pixvox.mod import required_java
+    assert (required_java("1.21.1"), required_java("26.3"), required_java()) == (21, 25, 25)
+    with tmpdir() as tmp:
+        for kw in ({"loader": "fabric", "mc": "1.21.1"}, {"loader": "neoforge", "mc": "1.20.1"}):
+            try:
+                export_mod([Block("b", marked_volume())], tmp / "mod", "demo", quiet=True, **kw)
+            except ValueError as e:
+                assert "1.2" in str(e)
+            else:
+                raise AssertionError(kw)

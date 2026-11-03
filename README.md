@@ -131,7 +131,7 @@ ratée), `2` erreur d'utilisation ou d'environnement, `3` erreur interne.
 ## Limites
 
 - Java Edition uniquement (pas Bedrock) ; resource packs pour 1.21.4 → 26.3 ou 1.21.1, mods pour
-  Minecraft 26.3 (versions dans `pixvox/mod.py`).
+  Minecraft 26.3 (Fabric, NeoForge) ou 1.21.1 (NeoForge, `--mc 1.21.1`, JDK 21) ; versions dans `pixvox/mod.py`.
 - Seules les textures s'animent (limite du jeu) ; pas de tintes de biome ni de textures connectées.
 - `Multipart` (parties affichées selon les propriétés du bloc) s'exporte en resource pack ; `pixvox mod` ne le
   génère pas, le bloc s'enregistre dans le mod qui le possède.

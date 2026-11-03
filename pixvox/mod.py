@@ -1,4 +1,5 @@
-"""pixvox.mod — export en MOD Fabric (Minecraft 26.3) : de vrais blocs, pas seulement des apparences.
+"""pixvox.mod — export en MOD Fabric ou NeoForge (Minecraft 26.3), ou NeoForge 1.21.1 (mc="1.21.1") : de
+vrais blocs, pas seulement des apparences.
 
 export_mod(assets, "out/mod", modid="mon_mod") écrit un projet Gradle complet :
   - les ressources (modèles, textures animées, blockstates, définitions d'items) — les mêmes que le
@@ -13,6 +14,8 @@ export_mod(assets, "out/mod", modid="mon_mod") écrit un projet Gradle complet :
   - les données : tables de butin (format 26.3), tags d'outil (pioche, hache…), noms (en_us, fr_fr),
     un onglet créatif ;
   - fabric.mod.json, build.gradle, Gradle wrapper. `./gradlew build` (JDK 25) -> build/libs/<modid>-<version>.jar
+Cible 1.21.1 : Java 21, ressources de l'export 1.21.1, tables de butin au format 1.21.1, code Java adapté
+par _java_1_21_1 (noms vérifiés avec javap dans le jar 1.21.1 de NeoForge et par la compilation en CI).
 Le comportement en jeu se règle avec asset.props = Props(...) (dureté, son, lumière, outil, particules…).
 """
 from __future__ import annotations
@@ -35,7 +38,9 @@ TEMPLATES = Path(__file__).parent / "mod_templates"
 FABRIC = {"minecraft": "26.3", "loader": "0.19.5", "loom": "1.18-SNAPSHOT", "fabric_api": "0.163.0+26.3",
           "java": 25}
 NEOFORGE = {"minecraft": "26.3", "neoforge": "26.3.0.90", "moddev": "2.0.148", "java": 25}
+NEOFORGE_1_21_1 = {"minecraft": "1.21.1", "neoforge": "21.1.259", "moddev": "2.0.148", "java": 21}
 LOADERS = ("fabric", "neoforge")
+MOD_TARGETS = ("26.3", "1.21.1")      # --mc : 1.21.1 existe seulement pour NeoForge
 RESERVED_IDS = {"minecraft", "realms", "brigadier", "java", "fabric", "fabricloader", "fabric_api", "neoforge",
                 "forge", "mixinextras", "c", "common"}
 JAVA_KEYWORDS = set("""abstract assert boolean break byte case catch char class const continue default do double
@@ -140,8 +145,8 @@ def _enc(boxes) -> str:
 
 # ============================================================================ projet
 class _Ctx:
-    def __init__(self, modid, pkg, main, loader="fabric"):
-        self.modid, self.pkg, self.main, self.loader = modid, pkg, main, loader
+    def __init__(self, modid, pkg, main, loader="fabric", mc="26.3"):
+        self.modid, self.pkg, self.main, self.loader, self.mc = modid, pkg, main, loader, mc
         self.decls: list[str] = []
         self.multi_classes: dict = {}
         self.lang = {"en_us": {}, "fr_fr": {}}
@@ -202,6 +207,14 @@ def _tags(ctx: _Ctx, name: str, p: Props):
 
 def _loot(ctx: _Ctx, name: str, state: dict | None = None):
     entry = {"type": "minecraft:item", "name": f"{ctx.modid}:{name}"}
+    if ctx.mc == "1.21.1":                           # conditions en liste, block_state_property
+        if state:
+            entry["conditions"] = [{"condition": "minecraft:block_state_property", "block": f"{ctx.modid}:{name}",
+                                    "properties": state}]
+        ctx.loot[name] = {"type": "minecraft:block", "random_sequence": f"{ctx.modid}:blocks/{name}",
+                          "pools": [{"conditions": [{"condition": "minecraft:survives_explosion"}],
+                                     "entries": [entry], "rolls": 1}]}
+        return
     if state:
         entry = {"type": "minecraft:item", "condition": {"type": "minecraft:match_block",
                                                          "blocks": f"{ctx.modid}:{name}", "state": state},
@@ -567,7 +580,43 @@ public final class ModContent {{
     return files
 
 
+# 1.21.1 : updateShape a son ancienne signature, dont l'ordre des voisins diffère
+_UPDATE_SHAPE_26 = """    protected BlockState updateShape(BlockState state, LevelReader level, ScheduledTickAccess ticks, BlockPos pos,
+                                     Direction direction, BlockPos neighborPos, BlockState neighborState,
+                                     RandomSource random) {{""".replace("{{", "{")
+_UPDATE_SHAPE_1_21_1 = """    protected BlockState updateShape(BlockState state, Direction direction, BlockState neighborState,
+                                     LevelAccessor level, BlockPos pos, BlockPos neighborPos) {"""
+_RENAMES_1_21_1 = (
+    ("import net.minecraft.resources.Identifier;", "import net.minecraft.resources.ResourceLocation;"),
+    ("public static Identifier id(", "public static ResourceLocation id("),
+    ("return Identifier.fromNamespaceAndPath(", "return ResourceLocation.fromNamespaceAndPath("),
+    ("import net.minecraft.world.level.LevelReader;\nimport net.minecraft.world.level.ScheduledTickAccess;\n",
+     "import net.minecraft.world.level.LevelAccessor;\n"),
+    (_UPDATE_SHAPE_26, _UPDATE_SHAPE_1_21_1),
+    ("return super.updateShape(state, level, ticks, pos, direction, neighborPos, neighborState, random);",
+     "return super.updateShape(state, direction, neighborState, level, pos, neighborPos);"),
+    ("BLOCKS.registerBlock(name, factory, props)", "BLOCKS.registerBlock(name, factory, props.get())"),
+    (".noCollision()", ".noCollission()"),
+    ("PushReaction.IMMOVEABLE", "PushReaction.BLOCK"),
+    ("BuiltInRegistries.BLOCK.getValue(", "BuiltInRegistries.BLOCK.get("),
+    ("BuiltInRegistries.ITEM.getValue(", "BuiltInRegistries.ITEM.get("),
+)
+
+
+def _java_1_21_1(txt: str) -> str:
+    """Source Java 26.3 -> 1.21.1 : seuls ces noms et signatures diffèrent (vérifiés à la compilation)."""
+    for old, new in _RENAMES_1_21_1:
+        txt = txt.replace(old, new)
+    return txt
+
+
 def _java_files(ctx: _Ctx) -> dict:
+    """Sources Java de la cible du mod."""
+    files = _java_files_26(ctx)
+    return {k: _java_1_21_1(v) for k, v in files.items()} if ctx.mc == "1.21.1" else files
+
+
+def _java_files_26(ctx: _Ctx) -> dict:
     """Sources Java : point d'entrée + ModContent (selon le chargeur) et classes de blocs (communes)."""
     pkg = ctx.pkg
     files = _fabric_files(ctx) if ctx.loader == "fabric" else _neoforge_files(ctx)
@@ -950,6 +999,11 @@ public class {cls} extends PixvoxMultiBlock {{
 
 
 def _test_java(ctx: _Ctx) -> str:
+    text = _test_java_26(ctx)
+    return _java_1_21_1(text) if ctx.mc == "1.21.1" else text
+
+
+def _test_java_26(ctx: _Ctx) -> str:
     pkg, main = ctx.pkg, ctx.main
     neo = ctx.loader == "neoforge"
     get = ".get()" if neo else ""
@@ -1033,6 +1087,10 @@ public class GeneratedContentTest {{
 '''
 
 
+def _neo_versions(ctx: _Ctx) -> dict:
+    return NEOFORGE_1_21_1 if ctx.mc == "1.21.1" else NEOFORGE
+
+
 def _build_gradle(tests: bool = True) -> str:
     return '''plugins {
 	id 'net.fabricmc.fabric-loom' version "${loom_version}"
@@ -1085,13 +1143,20 @@ test {
 def export_mod(assets, out="out/mod", modid: str = "pixvox_mod", name: str | None = None, *,
                loader: str = "fabric", version: str = "1.0.0", authors=("pixvox",), description: str | None = None,
                package: str | None = None, license: str = "All-Rights-Reserved", build: bool = False,
-               java_home: str | None = None, zip_path=None, quiet: bool = False, tests: bool = True) -> dict:
+               java_home: str | None = None, zip_path=None, quiet: bool = False, tests: bool = True,
+               mc: str | None = None) -> dict:
     """Écrit un projet de mod complet dans `out` (recréé) pour Minecraft 26.3 :
-    loader='fabric' (Fabric Loader + Fabric API) ou 'neoforge' (NeoForge, ModDevGradle).
-    build=True lance `./gradlew build` (JDK 25 requis : java_home, ou JAVA_HOME), qui exécute aussi le
+    loader='fabric' (Fabric Loader + Fabric API) ou 'neoforge' (NeoForge, ModDevGradle) ; ou pour
+    Minecraft 1.21.1 : mc="1.21.1", loader='neoforge' seulement (NeoForge 21.1, Java 21).
+    build=True lance `./gradlew build` (JDK de la cible requis : java_home, ou JAVA_HOME), qui exécute aussi le
     test de fumée généré (tests=True : registres du jeu + mod chargés dans JUnit, sans ouvrir le jeu). Retourne {project, jar, summary, assets}."""
     if loader not in LOADERS:
         raise ValueError(f"loader = {' ou '.join(LOADERS)}")
+    mc = mc or MOD_TARGETS[0]
+    if mc not in MOD_TARGETS:
+        raise ValueError(f"mc={mc!r} inconnu : {', '.join(MOD_TARGETS)}")
+    if mc == "1.21.1" and loader != "neoforge":
+        raise ValueError("Minecraft 1.21.1 : seul NeoForge est pris en charge (--loader neoforge)")
     if not re.fullmatch(r"[a-z][a-z0-9_]{1,63}", modid):
         raise ValueError("modid : minuscules, chiffres et _, commence par une lettre (2–64 caractères)")
     if modid in RESERVED_IDS:
@@ -1111,7 +1176,7 @@ def export_mod(assets, out="out/mod", modid: str = "pixvox_mod", name: str | Non
         shutil.rmtree(root)
     try:
         result = _write_project(assets, root, final, modid, name, pkg, names, loader=loader, version=version,
-                                authors=authors, description=description, license=license, tests=tests)
+                                authors=authors, description=description, license=license, tests=tests, mc=mc)
     except BaseException:
         shutil.rmtree(root, ignore_errors=True)
         raise
@@ -1124,8 +1189,9 @@ def export_mod(assets, out="out/mod", modid: str = "pixvox_mod", name: str | Non
     if zip_path:
         _zip_project(root, Path(zip_path))
         result["zip"] = Path(zip_path)
+    result["mc"] = mc
     if build:
-        result["jar"] = build_mod(root, java_home, quiet=quiet)
+        result["jar"] = build_mod(root, java_home, quiet=quiet, java=required_java(mc))
     if not quiet:
         for n, kind, p in ctx.summary:
             extra = ""
@@ -1140,11 +1206,12 @@ def export_mod(assets, out="out/mod", modid: str = "pixvox_mod", name: str | Non
 
 
 def _write_project(assets, root: Path, final: Path, modid, name, pkg, names, *, loader, version, authors,
-                   description, license, tests) -> dict:
+                   description, license, tests, mc="26.3") -> dict:
     res = root / "src" / "main" / "resources"
     main = _camel(modid) + "Mod"
-    ctx = _Ctx(modid, pkg, main, loader)
-    pack = ResourcePack(res, modid, mod_mode=True)
+    ctx = _Ctx(modid, pkg, main, loader, mc)
+    pack = ResourcePack(res, modid, mod_mode=True, mc="1.21.1" if mc == "1.21.1" else None)
+    neo = _neo_versions(ctx)
     infos = []
     for a in assets:
         if isinstance(a, Multipart):
@@ -1220,16 +1287,17 @@ def _write_project(assets, root: Path, final: Path, modid, name, pkg, names, *, 
             f"fabric_api_version={FABRIC['fabric_api']}\n\nversion={version}\ngroup={pkg}\narchives_base_name={modid}\n",
             encoding="utf-8")
     else:
-        toml = (f'license="{license}"\n\n[[mods]]\nmodId="{modid}"\nversion="{version}"\ndisplayName="{title}"\n'
+        header = 'modLoader="javafml"\nloaderVersion="[4,)"\n' if mc == "1.21.1" else ""     # obligatoires pour FML 4
+        toml = (f'{header}license="{license}"\n\n[[mods]]\nmodId="{modid}"\nversion="{version}"\ndisplayName="{title}"\n'
                 f'logoFile="assets/{modid}/icon.png"\nauthors="{", ".join(authors)}"\n'
                 f"description='''\n{desc}\n'''\n\n"
                 f'[[dependencies.{modid}]]\n    modId="neoforge"\n    type="required"\n'
-                f'    versionRange="[{NEOFORGE["neoforge"]},)"\n    ordering="NONE"\n    side="BOTH"\n\n'
+                f'    versionRange="[{neo["neoforge"]},)"\n    ordering="NONE"\n    side="BOTH"\n\n'
                 f'[[dependencies.{modid}]]\n    modId="minecraft"\n    type="required"\n'
-                f'    versionRange="[{NEOFORGE["minecraft"]}]"\n    ordering="NONE"\n    side="BOTH"\n')
+                f'    versionRange="[{neo["minecraft"]}]"\n    ordering="NONE"\n    side="BOTH"\n')
         (res / "META-INF").mkdir(parents=True, exist_ok=True)
         (res / "META-INF" / "neoforge.mods.toml").write_text(toml, encoding="utf-8")
-        (root / "build.gradle").write_text(_neoforge_gradle(tests), encoding="utf-8")
+        (root / "build.gradle").write_text(_neoforge_gradle(tests, neo), encoding="utf-8")
         if tests:
             tdir = root / "src" / "test" / "java" / Path(*pkg.split("."))
             tdir.mkdir(parents=True, exist_ok=True)
@@ -1241,7 +1309,7 @@ def _write_project(assets, root: Path, final: Path, modid, name, pkg, names, *, 
         (root / "gradle.properties").write_text(
             "org.gradle.jvmargs=-Xmx2G\norg.gradle.daemon=true\norg.gradle.parallel=true\norg.gradle.caching=true\n"
             "org.gradle.configuration-cache=true\n\n"
-            f"minecraft_version={NEOFORGE['minecraft']}\nneo_version={NEOFORGE['neoforge']}\n\n"
+            f"minecraft_version={neo['minecraft']}\nneo_version={neo['neoforge']}\n\n"
             f"mod_id={modid}\nmod_version={version}\nmod_group_id={pkg}\n", encoding="utf-8")
     (root / ".gitignore").write_text(".gradle/\nbuild/\nrun/\n*.iml\n.idea/\nout/\n", encoding="utf-8")
     mark_output_dir(root)
@@ -1249,7 +1317,7 @@ def _write_project(assets, root: Path, final: Path, modid, name, pkg, names, *, 
     return {"project": final, "jar": None, "summary": ctx.summary, "assets": infos, "_ctx": ctx}
 
 
-def _neoforge_gradle(tests: bool = True) -> str:
+def _neoforge_gradle(tests: bool = True, neo: dict = NEOFORGE) -> str:
     test_cfg = '''
 // Test de fumée (src/test) : NeoForge charge le jeu et le mod dans JUnit, sans ouvrir de fenêtre.
 neoForge {
@@ -1274,7 +1342,7 @@ test {
 ''' if tests else ""
     return f'''plugins {{
     id 'java-library'
-    id 'net.neoforged.moddev' version '{NEOFORGE["moddev"]}'
+    id 'net.neoforged.moddev' version '{neo["moddev"]}'
 }}
 
 version = mod_version
@@ -1284,7 +1352,7 @@ base {{
     archivesName = mod_id
 }}
 
-java.toolchain.languageVersion = JavaLanguageVersion.of({NEOFORGE["java"]})
+java.toolchain.languageVersion = JavaLanguageVersion.of({neo["java"]})
 
 neoForge {{
     version = project.neo_version
@@ -1311,9 +1379,10 @@ tasks.withType(JavaCompile).configureEach {{
 
 
 def _readme(modid, title, version, ctx) -> str:
+    neo = _neo_versions(ctx)
     rows = "\n".join(f"| `{modid}:{n}` | {k} |" for n, k, _ in ctx.summary)
     if ctx.loader == "neoforge":
-        return f"""# {title} — mod NeoForge pour Minecraft {NEOFORGE['minecraft']} (généré par pixvox)
+        return f"""# {title} — mod NeoForge pour Minecraft {neo['minecraft']} (généré par pixvox)
 
 | identifiant | type |
 |---|---|
@@ -1321,13 +1390,13 @@ def _readme(modid, title, version, ctx) -> str:
 
 ## Construire le .jar
 
-Il faut Java {NEOFORGE['java']} (Gradle le télécharge au besoin). Dans ce dossier :
+Il faut Java {neo['java']} (Gradle le télécharge au besoin). Dans ce dossier :
 
 ```
 ./gradlew build          # Windows : gradlew.bat build
 ```
 
-La première construction prépare Minecraft {NEOFORGE['minecraft']} + NeoForge {NEOFORGE['neoforge']} (plusieurs minutes).
+La première construction prépare Minecraft {neo['minecraft']} + NeoForge {neo['neoforge']} (plusieurs minutes).
 Le mod est dans `build/libs/{modid}-{version}.jar` : copiez-le dans `mods/` d'une instance NeoForge.
 Tester directement : `./gradlew runClient`. `./gradlew test` (aussi lancé par `build`) charge le jeu et le
 mod dans JUnit, sans fenêtre, et vérifie chaque bloc.
@@ -1414,16 +1483,23 @@ def java_version(java_home: str | None) -> int | None:
     return int(m.group(2) or 0) if major == 1 else major          # « 1.8 » -> 8
 
 
-def build_mod(project, java_home: str | None = None, timeout: int = 1800, quiet: bool = False) -> Path:
+def required_java(mc: str | None = None) -> int:
+    """Version de JDK qu'exige la compilation d'un mod de cette cible."""
+    return NEOFORGE_1_21_1["java"] if mc == "1.21.1" else FABRIC["java"]
+
+
+def build_mod(project, java_home: str | None = None, timeout: int = 1800, quiet: bool = False,
+              java: int | None = None) -> Path:
     """Compile le projet avec le Gradle wrapper. Retourne le chemin du .jar ; le journal complet est
     écrit dans build_log.txt."""
     project = Path(project)
+    need = java or FABRIC["java"]
     jh = find_java(java_home)
     if jh is None:
-        raise RuntimeError(f"JDK {FABRIC['java']} introuvable : passez java_home=… ou définissez JAVA_HOME")
+        raise RuntimeError(f"JDK {need} introuvable : passez java_home=… ou définissez JAVA_HOME")
     ver = java_version(jh)
-    if ver is not None and ver < int(FABRIC["java"]):
-        raise RuntimeError(f"JDK {ver} trouvé dans {jh}, il faut un JDK {FABRIC['java']} ou plus récent")
+    if ver is not None and ver < need:
+        raise RuntimeError(f"JDK {ver} trouvé dans {jh}, il faut un JDK {need} ou plus récent")
     env = dict(os.environ, JAVA_HOME=jh, PATH=f"{Path(jh) / 'bin'}{os.pathsep}{os.environ.get('PATH', '')}")
     wrapper = project.resolve() / ("gradlew.bat" if os.name == "nt" else "gradlew")
     cmd = [str(wrapper), "build", "--no-daemon", "--console=plain", "--stacktrace"]
