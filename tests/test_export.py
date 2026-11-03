@@ -505,3 +505,11 @@ def test_empty_part_needs_a_particle_from_the_block():
     base = Model("ok_base", v)
     mp = Multipart("ok", [Part(base), Part.empty("ok_vide", base, {"open": 1})], {"open": [0, 1]})
     assert mp.quads(0)
+def test_export_is_reproducible():
+    """Deux exports d'une même description donnent les mêmes fichiers (comparés en CI par Folkhold)."""
+    def files(root):
+        return {p.relative_to(root).as_posix(): p.read_bytes() for p in root.rglob("*") if p.is_file()}
+    with tmpdir() as tmp:
+        for name in ("a", "b"):
+            export_assets([_board(), animated_model()], tmp / name / "pack", mc="1.21.1", textures="folders", log=None)
+        assert files(tmp / "a") == files(tmp / "b")

@@ -5,6 +5,8 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; ve
 
 ## [Non publié]
 
+## [0.2.0]
+
 ### Ajouté
 
 - Cible d'export Minecraft 1.21.1 (NeoForge 21.1) : `pixvox export … --mc 1.21.1`, `export_pack(…, mc="1.21.1")`
