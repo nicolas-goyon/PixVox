@@ -1,7 +1,8 @@
 """pixvox.assets — les objets que l'on décrit : Block (bloc plein), Model (modèle voxel), Item (sprite plat),
-MultiBlock (objet de plusieurs blocs). Tous peuvent être animés (textures animées de Minecraft)."""
+MultiBlock (objet de plusieurs blocs), Multipart (bloc dont les parties dépendent de ses propriétés). Tous peuvent être animés (textures animées de Minecraft)."""
 from __future__ import annotations
 
+import itertools
 import math
 from dataclasses import dataclass
 
@@ -524,3 +525,157 @@ class MultiBlock(Asset, _Animated):
 
     def gui_transform(self):
         return 0.625, (8.0, 8.0, 8.0)
+
+
+def _when_value(value) -> str:
+    """Valeur de condition au format du jeu : 1 -> "1", [1, 2] ou range(1, 3) -> "1|2"."""
+    if isinstance(value, (list, tuple, range)):
+        return "|".join(str(x) for x in value)
+    return str(value)
+
+
+def _when_json(when: dict | None) -> dict | None:
+    """Condition au format du jeu ; "OR" reçoit une liste de conditions."""
+    if not when:
+        return None
+    if "OR" in when:
+        if len(when) > 1:
+            raise ValueError('"OR" doit être seul dans une condition : mettre les autres propriétés dans chaque branche')
+        return {"OR": [_when_json(w) for w in when["OR"]]}
+    return {k: _when_value(v) for k, v in when.items()}
+
+
+@dataclass
+class Part:
+    """Partie d'un Multipart : un Model affiché quand `when` est vrai (toujours si when vaut None).
+
+    when : {"papers": 3}, {"papers": [3, 4]} ou {"papers": range(3, 8)} (toutes les propriétés doivent
+    correspondre), ou {"OR": [{"column": [0, 2]}, {"row": [0, 2]}]}.
+    Part.empty(nom, particle, when) : modèle sans élément, pour les états qui n'affichent rien."""
+    model: Model | None
+    when: dict | None = None
+    empty_name: str | None = None
+    particle: Model | None = None
+
+    @classmethod
+    def empty(cls, name: str, particle: Model, when: dict | None = None) -> Part:
+        return cls(None, when, name, particle)
+
+
+class Multipart(Asset):
+    """Bloc au blockstate multipart : plusieurs modèles affichés selon ses propriétés.
+
+    properties  {nom: valeurs possibles}, sans "facing"
+    parts       liste de Part, dans l'ordre du fichier
+    facing      True : chaque Part à modèle existe dans les 4 directions (face avant au nord, rotation y)
+    item        Model de l'objet en main et dans l'inventaire (défaut : la première partie)
+    item_display  champ "display" du modèle d'objet (rotations et échelles par contexte)
+    Le bloc lui-même (propriétés, collision) reste à enregistrer dans le mod qui le possède."""
+    kind = "multipart"
+
+    def __init__(self, name: str, parts: list, properties: dict | None = None, facing: bool = False,
+                 item: Model | None = None, item_display: dict | None = None, notes: str = ""):
+        super().__init__(name, notes)
+        self.parts = list(parts)
+        self.properties = {k: [str(x) for x in v] for k, v in (properties or {}).items()}
+        self.facing = bool(facing)
+        self.models = [p.model for p in self.parts if p.model is not None]
+        if not self.models:
+            raise ValueError(f"{name} : il faut au moins une partie avec un modèle")
+        self.item = item if item is not None else self.models[0]
+        self.item_display = item_display
+        if "facing" in self.properties:
+            raise ValueError(f'{name} : "facing" ne se déclare pas dans properties, utiliser facing=True')
+        names = [m.name for m in {id(m): m for m in self.models + [self.item]}.values()]
+        names += [p.empty_name for p in self.parts if p.model is None]
+        if len(names) != len(set(names)):
+            raise ValueError(f"{name} : deux modèles de parties ont le même nom ({names})")
+        for p in self.parts:
+            self._check_when(p.when)
+
+    def _check_when(self, when: dict | None) -> None:
+        when = _when_json(when)
+        for branch in (when or {}).get("OR", [when] if when else []):
+            for key, value in branch.items():
+                allowed = self.properties.get(key)
+                if allowed is None:
+                    raise ValueError(f"{self.name} : propriété {key!r} inconnue ({', '.join(self.properties)})")
+                bad = [x for x in value.split("|") if x not in allowed]
+                if bad:
+                    raise ValueError(f"{self.name} : {key}={bad} hors des valeurs {allowed}")
+
+    @property
+    def volume(self) -> Volume:
+        """Volume de la première partie (inspection)."""
+        return self.models[0].volume
+
+    @property
+    def anims(self) -> list:
+        return []                                # chaque modèle est vérifié seul, à chaque image
+
+    def active(self, state: dict) -> list:
+        """Parties affichées dans cet état."""
+        from .mcmodel import when_matches
+        return [p for p in self.parts if when_matches(_when_json(p.when), state)]
+
+    def state_quads(self, state: dict) -> list:
+        """Géométrie attendue dans cet état, depuis les volumes."""
+        from .mcmodel import rotate_quads_y
+        y = FACING_Y.get(state.get("facing", "north"), 0) if self.facing else 0
+        return [q for p in self.active(state) if p.model is not None for q in rotate_quads_y(p.model.quads(0), y)]
+
+    def states(self, limit: int = 16) -> list:
+        """États utiles à montrer et à vérifier : un par ensemble de parties affichées (du plus petit au plus
+        grand, `limit` au plus, répartis), puis l'ensemble le plus grand dans les autres directions.
+        Renvoie [(libellé, état)]."""
+        keys = list(self.properties)
+        found: dict = {}
+        for values in itertools.product(*(self.properties[k] for k in keys)):
+            state = dict(zip(keys, values))
+            if self.facing:
+                state["facing"] = "north"
+            shown = tuple(i for i, p in enumerate(self.parts) if p.model is not None and p in self.active(state))
+            found.setdefault(shown, state)
+        ordered = sorted(found.items(), key=lambda kv: len(kv[0]))
+        if len(ordered) > limit:
+            step = (len(ordered) - 1) / (limit - 1)
+            ordered = [ordered[round(i * step)] for i in range(limit)]
+        out = [(_state_label(s), s) for _, s in ordered]
+        if self.facing:
+            biggest = ordered[-1][1]
+            out += [(_state_label(s), s) for s in ({**biggest, "facing": f} for f in ("east", "south", "west"))]
+        return out
+
+    def quads(self, tick: float = 0) -> list:
+        """Géométrie de l'état qui affiche le plus de parties."""
+        return self.state_quads(max((s for _, s in self.states()), key=lambda s: len(self.active(s))))
+
+    def blockstate(self, ns: str) -> dict:
+        """Contenu du blockstate multipart."""
+        cases = []
+        facings = FACING_Y.items() if self.facing else [(None, 0)]
+        for facing, y in facings:
+            for p in self.parts:
+                if p.model is None:
+                    continue
+                apply = {"model": f"{ns}:block/{p.model.name}"}
+                if y:
+                    apply["y"] = y
+                when = _when_json(p.when)
+                if facing and when and "OR" in when:
+                    when = {"OR": [{**w, "facing": facing} for w in when["OR"]]}
+                elif facing:
+                    when = {**(when or {}), "facing": facing}
+                cases.append({"when": when, "apply": apply} if when else {"apply": apply})
+        for p in self.parts:
+            if p.model is None:
+                case = {"apply": {"model": f"{ns}:block/{p.empty_name}"}}
+                cases.append({"when": _when_json(p.when), **case} if p.when else case)
+        return {"multipart": cases}
+
+
+FACING_Y = {"north": 0, "east": 90, "south": 180, "west": 270}
+
+
+def _state_label(state: dict) -> str:
+    return " ".join(f"{k}={v}" for k, v in state.items()) or "tous états"

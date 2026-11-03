@@ -5,12 +5,12 @@ Niveaux : OK, INFO, ATTENTION (WARN), ERREUR (ERR).
 from __future__ import annotations
 
 from collections import Counter, deque
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 
 from .anim import Anim
-from .assets import Block, Item, Model, MultiBlock
+from .assets import Block, Item, Model, MultiBlock, Multipart
 from .color import delta_e, hexa, lightness, lightness_array, rgb_to_oklab, unique_colors
 from .volume import FACES
 
@@ -523,7 +523,17 @@ def analyze_multiblock(mb: MultiBlock) -> list:
     return out
 
 
+def analyze_multipart(mp) -> list:
+    """Constats de chaque modèle du bloc, préfixés par son nom."""
+    out = [Finding("INFO", "parties", f"{len(mp.parts)} parties, {len(mp.states())} états utiles")]
+    for m in {id(m): m for m in mp.models + [mp.item]}.values():
+        out += [replace(f, msg=f"{m.name} : {f.msg}") for f in analyze_model(m)]
+    return out
+
+
 def analyze(asset) -> list:
+    if isinstance(asset, Multipart):
+        return analyze_multipart(asset)
     if isinstance(asset, MultiBlock):
         return analyze_multiblock(asset)
     if isinstance(asset, Block):
@@ -537,7 +547,7 @@ def analyze(asset) -> list:
 
 def format_report(asset, findings: list, extra: list | None = None) -> str:
     kind = {"cube": "bloc plein 16³", "model": "modèle voxel", "sprite": "item plat",
-            "multi": "objet multibloc"}[asset.kind]
+            "multi": "objet multibloc", "multipart": "bloc multipart"}[asset.kind]
     head = f"=== {asset.name} ({kind}) ==="
     lines = [head] + [f.line() for f in findings]
     if extra:

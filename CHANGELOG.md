@@ -16,6 +16,10 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; ve
 - Rangement des textures de blocs : `pixvox export … --textures folders`, `export_pack(…, textures="folders")`
   (#31). Un dossier par modèle (`textures/block/<modèle>/atlas.png`, `glow.png`…) ; le champ JSON `textures`
   indique le rangement. Le rangement par défaut ne change pas.
+- Blockstates `multipart` : `Multipart` et `Part` (#33). Parties selon les propriétés (valeur, liste, `OR`),
+  rotation de `facing` sur chaque partie, modèle vide (`Part.empty`), modèle d'objet choisi avec `display`.
+  La vérification relit le blockstate pour chaque ensemble de parties et chaque direction ; la planche les
+  montre. Nouveau `kind` JSON : `multipart`. `pixvox mod` refuse ce type d'asset (code 1).
 - `pixvox.mcmodel` lit les fichiers comme 1.21.1 (`ModelLoader(mc="1.21.1")`, `render-model --mc 1.21.1`) :
   `neoforge_data`, couche de rendu de `render_type`, champs inconnus de 1.21.1 ignorés comme le fait le
   jeu, modèles que le jeu refuse (`forge_data`, rotation interdite) signalés.

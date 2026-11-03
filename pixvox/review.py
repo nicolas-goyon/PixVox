@@ -12,7 +12,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from ._io import say
 from .analyze import analyze, format_report
-from .assets import Block, Item, Model, MultiBlock
+from .assets import Block, Item, Model, MultiBlock, Multipart
 from .color import hexa, lightness, lightness_array, unique_colors
 from .render import (
     BACK,
@@ -488,6 +488,23 @@ def _sheet_item(it: Item, findings) -> Image.Image:
     return _analysis_panel(cv, x, 50 + 250 + 16, W - x - 16, findings)
 
 
+def _sheet_multipart(mp, findings) -> Image.Image:
+    """Une case par état utile : base seule, parties ajoutées, toutes les parties, autres directions."""
+    states = [(label, s) for label, s in mp.states() if mp.state_quads(s)]
+    P, cols = 280, 5
+    rows = (len(states) + cols - 1) // cols
+    W, y2 = 16 + cols * (P + 26), 50 + rows * (P + 52)
+    cv = Image.new("RGBA", (W, y2 + 420), BG)
+    props = ", ".join(mp.properties) + (", facing" if mp.facing else "")
+    _header(cv, mp.name, f"bloc multipart · {len(mp.parts)} parties · propriétés : {props or 'aucune'}")
+    camera_q = mp.quads(0)
+    for i, (label, state) in enumerate(states):
+        box = _panel(cv, 16 + (i % cols) * (P + 26), 50 + (i // cols) * (P + 52), P + 10, P + 36, label[:38])
+        cam = fit_camera(camera_q if state.get("facing", "north") == "north" else mp.state_quads(state), INVENTORY, P, P, 0.05)
+        _paste_center(cv, _img(render(mp.state_quads(state), cam, shading="gui")), box)
+    return _analysis_panel(cv, 16, y2, W - 32, findings)
+
+
 def review_data(asset, out_dir="out") -> dict:
     """Planche de revue PNG + rapport texte (+ planche d'animation et GIF), sans rien afficher.
 
@@ -496,7 +513,9 @@ def review_data(asset, out_dir="out") -> dict:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     findings = analyze(asset)
-    if isinstance(asset, MultiBlock):
+    if isinstance(asset, Multipart):
+        sheet = _sheet_multipart(asset, findings)
+    elif isinstance(asset, MultiBlock):
         sheet = _sheet_multi(asset, findings)
     elif isinstance(asset, Block):
         sheet = _sheet_block(asset, findings)

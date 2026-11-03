@@ -28,8 +28,8 @@ from pathlib import Path
 import numpy as np
 
 from ._io import MARKER, mark_output_dir, prepare_output_dir, say
-from .assets import PARTICLES, Block, Item, Model, MultiBlock, Props
-from .export import ResourcePack, dumps, greedy_boxes
+from .assets import PARTICLES, Block, Item, Model, MultiBlock, Multipart, Props
+from .export import ExportError, ResourcePack, dumps, greedy_boxes
 
 TEMPLATES = Path(__file__).parent / "mod_templates"
 FABRIC = {"minecraft": "26.3", "loader": "0.19.5", "loom": "1.18-SNAPSHOT", "fabric_api": "0.163.0+26.3",
@@ -1147,6 +1147,9 @@ def _write_project(assets, root: Path, final: Path, modid, name, pkg, names, *, 
     pack = ResourcePack(res, modid, mod_mode=True)
     infos = []
     for a in assets:
+        if isinstance(a, Multipart):
+            raise ExportError(f"{a.name} : pixvox mod ne génère pas encore de Multipart ; l'exporter avec pixvox export "
+                              "et enregistrer le bloc et ses propriétés dans le mod")
         infos.append(pack.add(a))           # ExportError si un modèle est invalide pour le jeu : pas de mod bancal
         for w in infos[-1].get("warnings", []):
             say(f"[mod] ATTENTION {a.name} : {w}")

@@ -133,6 +133,8 @@ ratée), `2` erreur d'utilisation ou d'environnement, `3` erreur interne.
 - Java Edition uniquement (pas Bedrock) ; resource packs pour 1.21.4 → 26.3 ou 1.21.1, mods pour
   Minecraft 26.3 (versions dans `pixvox/mod.py`).
 - Seules les textures s'animent (limite du jeu) ; pas de tintes de biome ni de textures connectées.
+- `Multipart` (parties affichées selon les propriétés du bloc) s'exporte en resource pack ; `pixvox mod` ne le
+  génère pas, le bloc s'enregistre dans le mod qui le possède.
 - Faces translucides : pixvox les mélange pixel par pixel, le jeu les trie quad par quad. Là où deux faces
   translucides se croisent, l'image en jeu peut différer de la planche ; la vérification ne compare pas ce tri.
   Un `Block` n'a que sa peau : un cœur opaque dans un cube de verre ne s'exporte pas (utiliser `Model`).

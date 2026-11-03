@@ -1,9 +1,10 @@
 """Export resource pack : chaque fichier écrit est relu comme le jeu et comparé au volume."""
 import json
 
+import numpy as np
 from PIL import Image
 
-from pixvox import Anim, Block, Item, Model, MultiBlock, Sprite, Volume, export_pack, fire, flow, ramp
+from pixvox import Anim, Block, Item, Model, MultiBlock, Multipart, Part, Sprite, Volume, export_pack, fire, flow, ramp
 from pixvox.assets import Plane
 from pixvox.export import ExportError, ResourcePack, export_assets, optimize_model, plane_element, verified
 from pixvox.mcmodel import ModelLoader
@@ -408,3 +409,69 @@ def test_two_assets_with_the_same_name_are_refused():
     with tmpdir() as tmp:
         res = export_assets([Block("meme", marked_volume()), Block("meme", marked_volume(2))], tmp / "pack", log=None)
         assert [n for n, _ in res["refused"]] == ["meme"] and len(res["infos"]) == 1
+def _board():
+    """Bloc au nom de sa base : une planche, deux feuilles selon `papers`, un modèle vide hors du milieu."""
+    def slab(z0, z1, color):
+        v = Volume(16, 16, 16)
+        v.set(v.m_box(2, 2, z0, 13, 13, z1), color)
+        return v
+    base = Model("board", slab(7, 8, "#8a6a48"))
+    one = Model("board_paper_1", slab(5, 5, "#e8dcbc"))
+    two = Model("board_paper_2", slab(4, 4, "#a8322b"))
+    full = Model("board_full", slab(4, 8, "#d6c69f"))
+    parts = [Part(base, {"column": 1}), Part(one, {"column": 1, "papers": [1, 2]}), Part(two, {"column": 1, "papers": 2}),
+             Part.empty("board_part", base, {"OR": [{"column": [0, 2]}, {"papers": 9}]})]
+    return Multipart("board", parts, {"column": range(3), "papers": [0, 1, 2, 9]}, facing=True, item=full,
+                     item_display={"gui": {"rotation": [30, 225, 0], "translation": [0, 0, 0], "scale": [0.5, 0.5, 0.5]}})
+
+
+def test_multipart_export_both_targets():
+    for mc, item in (("1.21.4+", "items/board.json"), ("1.21.1", "models/item/board.json")):
+        with tmpdir() as tmp:
+            res = export_assets([_board()], tmp / "pack", mc=mc, textures="folders", log=None)
+            info = res["infos"][0]
+            assert verified(info) and info["kind"] == "multipart", info["verify"]
+            base = tmp / "pack/assets/pixvox"
+            state = json.loads((base / "blockstates/board.json").read_text(encoding="utf-8"))["multipart"]
+            assert state[0] == {"when": {"column": "1", "facing": "north"}, "apply": {"model": "pixvox:block/board"}}
+            assert state[3]["apply"] == {"model": "pixvox:block/board", "y": 90}
+            assert state[-1]["when"] == {"OR": [{"column": "0|2"}, {"papers": "9"}]}
+            assert json.loads((base / "models/block/board_part.json").read_text(encoding="utf-8")) == {
+                "textures": {"particle": "pixvox:block/board/atlas"}}
+            assert (base / item).exists() and not (base / "blockstates/board_paper_1.json").exists()
+            model = json.loads((base / "models/item/board.json").read_text(encoding="utf-8"))
+            assert model["parent"] == "pixvox:block/board_full" and "gui" in model["display"]
+
+
+def test_multipart_verification_sees_a_wrong_blockstate():
+    with tmpdir() as tmp:
+        pack = ResourcePack(tmp / "pack")
+        board = _board()
+        correct = board.blockstate
+        board.blockstate = lambda ns: {"multipart": [c for c in correct(ns)["multipart"] if "y" not in c["apply"]]}
+        assert pack.add(board)["verify"]["diff_px"] > 0
+
+
+def test_blockstate_rotation_follows_the_game():
+    """y=90 : ce qui regarde le nord regarde l'est, et le coin nord-ouest passe au nord-est."""
+    from pixvox.mcmodel import rotate_quads_y, when_matches
+    from pixvox.render import face_quad
+    q = face_quad("north", (0, 0, 0), (4, 16, 1), np.zeros((4, 4, 4), np.uint8))
+    turned = rotate_quads_y([q], 90)[0]
+    assert turned.face == "east" and list(turned.normal) == [1, 0, 0]
+    xs = [c[0] for c in turned.corners()]
+    zs = [c[2] for c in turned.corners()]
+    assert min(xs) == max(xs) == 16 and (min(zs), max(zs)) == (0, 4)
+    assert when_matches({"OR": [{"a": "1|2"}, {"b": "3"}]}, {"a": "9", "b": "3"})
+    assert not when_matches({"a": "1", "b": "3"}, {"a": "1", "b": "4"})
+
+
+def test_multipart_rejects_unknown_property_and_value():
+    v = Volume(4, 4, 4)
+    v.set(None, "#888888")
+    for when in ({"nope": 1}, {"papers": 5}):
+        try:
+            Multipart("bad", [Part(Model("m", v), when)], {"papers": range(3)})
+        except ValueError:
+            continue
+        raise AssertionError(when)
