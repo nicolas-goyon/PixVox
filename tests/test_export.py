@@ -300,3 +300,42 @@ def test_logging_never_crashes_on_a_narrow_console():
     say("vérification → OK", file=buf)
     buf.flush()
     assert buf.buffer.getvalue() == "vérification ? OK\n".encode("cp1252")
+
+
+def _glass_with_core(height):
+    """Corps semi-transparent, cœur opaque qui dépasse devant et derrière."""
+    v = Volume(16, height, 16)
+    v.set(v.m_box(3, 0, 3, 12, height - 4, 12), (120, 120, 255, 160))
+    core = v.m_box(6, height - 14, 2, 9, height - 8, 13)
+    v.set(core, "#ffcc33")
+    return v, core
+
+
+def test_multiblock_semi_transparent_with_opaque_core():
+    for mc in ("1.21.4+", "1.21.1"):
+        with tmpdir() as tmp:
+            v, core = _glass_with_core(32)
+            info = ResourcePack(tmp / "p", mc=mc).add(MultiBlock("mbx", v, emissive=core, emission=7))
+            assert info["verify"]["diff_px"] == 0, mc
+            v, _ = _glass_with_core(32)
+            assert ResourcePack(tmp / "q", mc=mc).add(MultiBlock("mby", v))["verify"]["diff_px"] == 0, mc
+
+
+def test_opaque_voxel_shows_through_semi_transparent_voxels():
+    v = Volume(16, 16, 16)
+    v.set(v.m_box(3, 0, 3, 12, 12, 12), (120, 120, 255, 160))
+    inner = v.m_box(6, 4, 6, 9, 8, 9)
+    v.set(inner, "#ffcc33")
+    assert (v.m_surface() & inner).any()                 # enfermé dans le verre, mais visible
+    assert not v.m_visible("up")[v.m_box(4, 1, 4, 5, 2, 5)].any()     # pas de face entre deux voxels de verre
+    for strategy in ("boxes", "palette"):
+        opt = optimize_model(Model("verre", v), strategy)
+        loader = ModelLoader(extra_textures={"t:block/a": opt.atlas.image})
+        qm = loader.quads({"textures": {"0": "t:block/a"}, "elements": opt.elements})
+        assert diff(quads_from_volume(v, offset=(0, 0, 0)), qm) == 0, strategy
+
+
+def test_opaque_volume_keeps_its_faces():
+    v = marked_volume()
+    for face in ("up", "down", "north", "south", "west", "east"):
+        assert (v.m_visible(face) == v.m_exposed(face)).all()

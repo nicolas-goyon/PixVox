@@ -181,17 +181,20 @@ def greedy_boxes(required: np.ndarray, fillable: np.ndarray, order=(0, 2, 1), us
     return boxes
 
 
-def _exposed_any(vol, face, lo, hi) -> bool:
+def _face_patch(datas, vol, face, lo, hi):
+    """Pile (T, H, W, 4) de la face `face` de la boîte [lo, hi], ou None si rien n'y est visible. Un texel
+    semi-transparent caché (contre un autre voxel plein) devient vide : une boîte opaque le recouvre, mais à
+    travers une face translucide il se verrait en trop. Les volumes opaques ne sont pas touchés."""
     X, Y, Z = face_coords(face, lo, hi)
-    n = NORMALS[face]
-    nx, ny, nz = X + n[0], Y + n[1], Z + n[2]
-    sx, sy, sz = vol.shape
-    out = (nx < 0) | (ny < 0) | (nz < 0) | (nx >= sx) | (ny >= sy) | (nz >= sz)
-    solid = vol.solid
-    inside = ~out
-    nb_solid = np.zeros_like(out)
-    nb_solid[inside] = solid[nx[inside], ny[inside], nz[inside]]
-    return bool((out | ~nb_solid).any())
+    visible = vol.m_visible(face)[X, Y, Z]
+    if not visible.any():
+        return None
+    patch = datas[:, X, Y, Z]
+    hide = ~visible & (patch[..., 3] < 255).any(axis=0)
+    if hide.any():
+        patch = patch.copy()
+        patch[:, hide] = 0
+    return patch
 
 
 # ============================================================================ atlas
@@ -330,9 +333,9 @@ def _face_stacks(datas, vol, boxes) -> list:
     for lo, hi, _ in boxes:
         fl = {}
         for f in FACES:
-            if _exposed_any(vol, f, lo, hi):
-                X, Y, Z = face_coords(f, lo, hi)
-                fl[f] = datas[:, X, Y, Z]
+            patch = _face_patch(datas, vol, f, lo, hi)
+            if patch is not None:
+                fl[f] = patch
         out.append(fl)
     return out
 
@@ -362,6 +365,20 @@ def _build(datas, vol, boxes, voxel_size, origin, emission: int = 15):
             el["light_emission"] = int(emission)
         elements.append(el)
     return elements, a0, a1, nf
+
+
+def _opacity_groups(datas, solid):
+    """Masques (semi-transparent, opaque) d'un volume qui mélange les deux, sinon None. Une boîte ne doit pas
+    les réunir : le voxel opaque enfermé dans une boîte translucide n'aurait plus de face."""
+    semi = solid & (datas[..., 3] < 255).any(axis=0)
+    return (semi, solid & ~semi) if semi.any() and (solid & ~semi).any() else None
+
+
+def _box_groups(solid, emissive, opacity) -> list:
+    """Groupes (émissif, voxels) découpés séparément : émissifs d'abord, puis, si le volume mélange les
+    opacités, chaque groupe séparé en semi-transparent et opaque."""
+    groups = [(False, solid)] if emissive is None else [(True, emissive), (False, solid & ~emissive)]
+    return groups if opacity is None else [(em, m & o) for em, m in groups for o in opacity]
 
 
 def _best_boxes(req, fil, used0):
@@ -394,15 +411,16 @@ def optimize_model(model: Model, strategy: str = "auto") -> ModelExport:
     E = getattr(model, "emissive", None)
     E = None if E is None else (np.asarray(E, bool) & solid)
     emission = getattr(model, "emission", 15)
+    opacity = _opacity_groups(datas, solid)
     results = {}
     if strategy in ("auto", "boxes"):
         used = np.zeros(vol.shape, bool)
         boxes = []
-        groups = [(False, solid)] if E is None else [(True, E), (False, solid & ~E)]
-        for em, fil in groups:
+        for em, fil in _box_groups(solid, E, opacity):
             req = surface & fil
             if req.any():
-                b, used = _best_boxes(req, fil | (hidden & ~used), used)
+                joker = hidden if opacity is None else hidden & next(o for o in opacity if (o & fil).any())
+                b, used = _best_boxes(req, fil | (joker & ~used), used)
                 boxes += [(lo, hi, em) for lo, hi in b]
         results["boxes"] = _build(datas, vol, boxes, model.voxel_size, model.origin, emission)
     if strategy in ("auto", "palette"):
@@ -423,7 +441,8 @@ def optimize_model(model: Model, strategy: str = "auto") -> ModelExport:
             for ci in np.argsort(-counts):
                 same = label == ci
                 em = bool(keys[ci][-1]) if E is not None else False
-                boxes += [(lo, hi, em) for lo, hi in greedy_boxes(same & surface, same | hidden, order, used)]
+                joker = hidden if opacity is None else hidden & next(o for o in opacity if (o & same).any())
+                boxes += [(lo, hi, em) for lo, hi in greedy_boxes(same & surface, same | joker, order, used)]
             if best is None or len(boxes) < len(best):
                 best = boxes
         # colore les voxels-jokers de chaque boîte avec la couleur de la boîte (faces unies, chaque image)
@@ -525,16 +544,21 @@ def optimize_multiblock(mb: MultiBlock) -> MultiExport:
     E = getattr(mb, "emissive", None)
     E = None if E is None else (np.asarray(E, bool) & solid)
     hidden = solid & ~surface
+    opacity = _opacity_groups(datas, solid)
     for cell in mb.cells():
         c0 = [cell[k] * r for k in range(3)]
         sl = tuple(slice(c0[k], min(c0[k] + r, vol.shape[k])) for k in range(3))
-        groups = [(False, solid[sl])] if E is None else [(True, E[sl]), (False, solid[sl] & ~E[sl])]
+        groups = _box_groups(solid[sl], None if E is None else E[sl],
+                             None if opacity is None else (opacity[0][sl], opacity[1][sl]))
         used = np.zeros(solid[sl].shape, bool)
         boxes = []
         for em, fil in groups:
             req = surface[sl] & fil
             if req.any():
-                b, used = _best_boxes(req, fil | (hidden[sl] & ~used), used)
+                joker = hidden[sl]
+                if opacity is not None:
+                    joker = joker & (opacity[0][sl] if (opacity[0][sl] & fil).any() else opacity[1][sl])
+                b, used = _best_boxes(req, fil | (joker & ~used), used)
                 boxes += [(lo, hi, em) for lo, hi in b]
         bf = []
         for lo, hi, em in boxes:
@@ -542,9 +566,9 @@ def optimize_multiblock(mb: MultiBlock) -> MultiExport:
             ghi = tuple(hi[k] + c0[k] for k in range(3))
             fl = {}
             for f in FACES:
-                if _exposed_any(vol, f, glo, ghi):
-                    X, Y, Z = face_coords(f, glo, ghi)
-                    fl[f] = datas[:, X, Y, Z]
+                patch = _face_patch(datas, vol, f, glo, ghi)
+                if patch is not None:
+                    fl[f] = patch
             if fl:
                 bf.append((glo, ghi, fl, em))
         if bf:
