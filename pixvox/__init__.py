@@ -75,7 +75,7 @@ def export_pack(assets, root="out/pack", namespace="pixvox", zip_path=None, repl
     mc      : version de Minecraft visée, "1.21.4+" (défaut : 1.21.4 → 26.3) ou "1.21.1" (NeoForge 21.1 :
               models/item, lumière en neoforge_data, render_type ; les fichiers vérifiés sont ceux de 1.21.1).
     Lève ExportError si un asset est refusé (les autres sont exportés) ; renvoie les infos d'export
-    (info["verify"]["diff_px"] == 0 : export fidèle).
+    (verified(info) : export fidèle, 0 pixel d'écart et aucune texture manquante).
     """
     from .export import ExportError, export_assets
     res = export_assets(assets, root, namespace, zip_path, replace, description, mc=mc)
@@ -85,6 +85,12 @@ def export_pack(assets, root="out/pack", namespace="pixvox", zip_path=None, repl
     return res["infos"]
 
 
+def verified(info):
+    """Vrai si un asset de export_pack est fidèle : re-rendu sans écart, aucune texture manquante."""
+    from .export import verified as _verified
+    return _verified(info)
+
+
 def export_mod(assets, out="out/mod", modid="pixvox_mod", name=None, **kw):
     """Projet de mod Minecraft 26.3 (loader="fabric" ou "neoforge") : vrais blocs (formes, lumière,
     particules, multiblocs posables). build=True compile le .jar (JDK 25). Voir pixvox.mod.export_mod."""
@@ -92,7 +98,7 @@ def export_mod(assets, out="out/mod", modid="pixvox_mod", name=None, **kw):
     return _export_mod(assets, out, modid, name, **kw)
 
 
-__all__ = ["Block", "Item", "Model", "MultiBlock", "Plane", "Props", "Anim", "Timing", "fire", "pulse",
+__all__ = ["verified", "Block", "Item", "Model", "MultiBlock", "Plane", "Props", "Anim", "Timing", "fire", "pulse",
            "flow", "FIRE", "SOUL_FIRE", "EMBER", "SOUL_EMBER", "Volume", "Sprite", "Ramp", "ramp",
            "ramp_between", "rgba", "hexa", "mix", "adjust", "lighten", "darken", "shade", "lightness",
            "luminance", "delta_e", "nearest", "perlin", "worley", "equalize", "FACES", "NORMALS",
