@@ -124,3 +124,20 @@ def test_mod_1_21_1_is_neoforge_only():
                 assert "1.2" in str(e)
             else:
                 raise AssertionError(kw)
+
+
+def test_mod_1_21_1_refuses_what_the_game_does_not_have():
+    from pixvox.assets import PARTICLES
+    from pixvox.export import ExportError
+    from pixvox.mod import PARTICLES_NOT_IN_1_21_1
+    particle = next(k for k, v in PARTICLES.items() if PARTICLES_NOT_IN_1_21_1 & set(v))
+    for props in (Props(sound="iron"), Props(particles=particle)):
+        block = Block("bloc_test", marked_volume())
+        block.props = props
+        with tmpdir() as tmp:
+            try:
+                export_mod([block], tmp / "mod", "demo_old", loader="neoforge", mc="1.21.1", quiet=True)
+            except ExportError as e:
+                assert "1.21.1" in str(e)
+            else:
+                raise AssertionError(props)
