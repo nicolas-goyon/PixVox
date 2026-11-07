@@ -251,12 +251,14 @@ perlin(shape, cells=4, seed=0, octaves=1)   # shape 2D, 3D… ou 4D (x, y, z, te
 - **Caisse / machine** (`reinforced_crate.py`) : panneaux `paint_face(f, sp, at=(2,2))`, cadre éclairé en
   3D, `seamless=False`.
 - **Herbe / mousse** (`mossy_stone.py`) : `cap(MOSS, depth=(1,4))` + `seamless="horizontal"`.
-- **Herbe / feuillages teintés** : peindre la partie teintée en gris clair (`ramp("#b4b4b4", spread=0.3)`, max
+- **Herbe / feuillages teintés** : peindre la partie teintée en gris clair (`ramp("#b4b4b4", spread=0.3,
+  hue_shift=0, tint=0)` : par défaut `ramp` colore légèrement ses gris, que la teinte salirait ; max
   vers 200 : le jeu multiplie par la couleur du biome), la marquer avec `tinted` (par ex. les voxels changés
   par `cap`) et `tint="grass"`. Le dessus entièrement teinté porte `tintindex` ; les côtés mixtes reçoivent une
   surcouche teintée (pixels de l'herbe seulement), comme le bloc d'herbe vanilla. Feuillages : `tint="foliage"`
   sans masque (tout le bloc), trous transparents → rendu cutout. La planche montre le bloc dans trois biomes
-  (plaine, marais, désert) ; `pixvox view … --biome jungle` pour un autre. Sans mod, la couleur n'apparaît en
+  (plaine, marais, désert) ; `pixvox view … --biome jungle` pour un autre. Exemples : `meadow_grass.py`,
+  `willow_leaves.py`. `pixvox mod` enregistre la couleur du biome côté client ; sans mod, elle n'apparaît en
   jeu que par `--replace` sur `minecraft:grass_block` / `oak_leaves` (alerte de l'export).
 - **Famille de construction** : `pierre.variants()` sur un bloc qui se raccorde (`seamless=True` ou
   `"horizontal"`). Chaque élément montre la peau du bloc plein à cet endroit, dans la direction où il

@@ -162,6 +162,7 @@ class _Ctx:
         self.variant_classes: set = set()   # sous-classes à générer (constructeurs protégés du jeu)
         self.item_tags: dict = {}
         self.recipes: dict = {}
+        self.tints: list = []           # (constante, "grass" | "foliage" | "water") : couleurs de biome (client)
 
 
 def _props_java(p: Props, *, full: bool, immovable: bool = False, light_expr: str | None = None) -> str:
@@ -249,6 +250,8 @@ def _register_block(ctx: _Ctx, a: Block):
         kind = "bloc plein"
     ctx.decls.append(("block", const, a.name, factory, props))
     ctx.checks.append((const, a.name, int(p.light), 0))
+    if a.tint:
+        ctx.tints.append((const, a.tint))
     _names(ctx, "block", a.name, p)
     _tags(ctx, a.name, p)
     _loot(ctx, a.name)
@@ -276,6 +279,8 @@ def _register_model(ctx: _Ctx, m: Model):
         kind = "modèle"
     ctx.decls.append(("block", const, m.name, factory, _props_java(p, full=False)))
     ctx.checks.append((const, m.name, int(p.light), 0))
+    if m.tint:
+        ctx.tints.append((const, m.tint))
     _names(ctx, "block", m.name, p)
     _tags(ctx, m.name, p)
     _loot(ctx, m.name)
@@ -456,6 +461,102 @@ def _loot_slab(ctx: _Ctx, name: str) -> None:
             {"type": "minecraft:explosion_decay"}]}
         pool = {"entries": [entry], "rolls": 1}
     ctx.loot[name] = {"type": "minecraft:block", "pools": [pool], "random_sequence": f"{ctx.modid}:blocks/{name}"}
+
+
+_TINT_SOURCE = {"grass": "grass", "foliage": "foliage", "water": "water"}          # BlockTintSources (26.3)
+_TINT_1_21_1 = {   # (couleur dans le monde, couleur par défaut / de l'objet) — BiomeColors, GrassColor, FoliageColor
+    "grass": ("BiomeColors.getAverageGrassColor(level, pos)", "GrassColor.getDefaultColor()"),
+    "foliage": ("BiomeColors.getAverageFoliageColor(level, pos)", "FoliageColor.getDefaultColor()"),
+    "water": ("BiomeColors.getAverageWaterColor(level, pos)", "0x3F76E4"),
+}
+
+
+def _client_files(ctx: _Ctx) -> dict:
+    """Couleurs de biome des blocs teintés, côté client seulement. 26.3 : BlockTintSources (Fabric :
+    BlockColorRegistry dans un ClientModInitializer ; NeoForge : RegisterColorHandlersEvent.BlockTintSources),
+    la teinte des objets étant dans items/<nom>.json. 1.21.1 : BlockColor (BiomeColors) et ItemColor
+    (RegisterColorHandlersEvent.Block / .Item). Noms vérifiés par javap dans les jars des deux versions."""
+    if not ctx.tints:
+        return {}
+    pkg, main = ctx.pkg, ctx.main
+    get = ".get()" if ctx.loader == "neoforge" else ""
+    by_kind: dict = {}
+    for const, kind in ctx.tints:
+        by_kind.setdefault(kind, []).append(f"ModContent.{const}{get}")
+    if ctx.mc == "1.21.1":
+        blocks = "\n".join(
+            f"        event.register((state, level, pos, tintIndex) -> level != null && pos != null\n"
+            f"                ? {_TINT_1_21_1[k][0]} : {_TINT_1_21_1[k][1]}, {', '.join(v)});"
+            for k, v in by_kind.items())
+        items = "\n".join(f"        event.register((stack, tintIndex) -> 0xFF000000 | {_TINT_1_21_1[k][1]}, {', '.join(v)});"
+                          for k, v in by_kind.items())
+        body = f'''import net.minecraft.client.renderer.BiomeColors;
+import net.minecraft.world.level.FoliageColor;
+import net.minecraft.world.level.GrassColor;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.neoforge.client.event.RegisterColorHandlersEvent;
+
+/** Couleurs de biome des blocs teintés (client seulement, généré par pixvox). */
+public final class ModClient {{
+    private ModClient() {{
+    }}
+
+    static void register(IEventBus bus) {{
+        bus.addListener(ModClient::blockColors);
+        bus.addListener(ModClient::itemColors);
+    }}
+
+    private static void blockColors(RegisterColorHandlersEvent.Block event) {{
+{blocks}
+    }}
+
+    private static void itemColors(RegisterColorHandlersEvent.Item event) {{
+{items}
+    }}
+}}
+'''
+        return {"ModClient.java": f"package {pkg};\n\n{body}"}
+    regs = "\n".join(f"        %REG%(List.of(BlockTintSources.{_TINT_SOURCE[k]}()), {', '.join(v)});"
+                      for k, v in by_kind.items())
+    if ctx.loader == "fabric":
+        return {f"{main}Client.java": f'''package {pkg};
+
+import java.util.List;
+
+import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.rendering.v1.BlockColorRegistry;
+import net.minecraft.client.color.block.BlockTintSources;
+
+/** Couleurs de biome des blocs teintés (client seulement, généré par pixvox). */
+public class {main}Client implements ClientModInitializer {{
+    @Override
+    public void onInitializeClient() {{
+{regs.replace("%REG%", "BlockColorRegistry.register")}
+    }}
+}}
+'''}
+    return {"ModClient.java": f'''package {pkg};
+
+import java.util.List;
+
+import net.minecraft.client.color.block.BlockTintSources;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.neoforge.client.event.RegisterColorHandlersEvent;
+
+/** Couleurs de biome des blocs teintés (client seulement, généré par pixvox). */
+public final class ModClient {{
+    private ModClient() {{
+    }}
+
+    static void register(IEventBus bus) {{
+        bus.addListener(ModClient::colors);
+    }}
+
+    private static void colors(RegisterColorHandlersEvent.BlockTintSources event) {{
+{regs.replace("%REG%", "event.register")}
+    }}
+}}
+'''}
 
 
 def _variant_classes(ctx: _Ctx) -> dict:
@@ -641,11 +742,14 @@ public final class ModContent {{
 
 def _neoforge_files(ctx: _Ctx) -> dict:
     pkg, main, modid = ctx.pkg, ctx.main, ctx.modid
+    client_call = "\n        if (dist.isClient()) ModClient.register(modEventBus);" if ctx.tints else ""
+    dist_arg = ", Dist dist" if ctx.tints else ""           # FML injecte Dist ; seulement s'il sert
+    dist_import = "import net.neoforged.api.distmarker.Dist;\n" if ctx.tints else ""
     files = {}
     files[f"{main}.java"] = f'''package {pkg};
 
 import net.minecraft.resources.Identifier;
-import net.neoforged.bus.api.IEventBus;
+{dist_import}import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 
 /** Point d'entrée du mod (généré par pixvox). */
@@ -653,8 +757,8 @@ import net.neoforged.fml.common.Mod;
 public class {main} {{
     public static final String MOD_ID = "{modid}";
 
-    public {main}(IEventBus modEventBus) {{
-        ModContent.register(modEventBus);
+    public {main}(IEventBus modEventBus{dist_arg}) {{
+        ModContent.register(modEventBus);{client_call}
     }}
 
     public static Identifier id(String path) {{
@@ -779,6 +883,7 @@ def _java_files_26(ctx: _Ctx) -> dict:
     pkg = ctx.pkg
     files = _fabric_files(ctx) if ctx.loader == "fabric" else _neoforge_files(ctx)
     files.update(_variant_classes(ctx))
+    files.update(_client_files(ctx))
     files["block/Fx.java"] = f'''package {pkg}.block;
 
 import net.minecraft.core.BlockPos;
@@ -1408,9 +1513,6 @@ def _write_project(assets, root: Path, final: Path, modid, name, pkg, names, *, 
         if isinstance(a, Multipart):
             raise ExportError(f"{a.name} : pixvox mod ne génère pas encore de Multipart ; l'exporter avec pixvox export "
                               "et enregistrer le bloc et ses propriétés dans le mod")
-        if getattr(a, "tint", None):
-            raise ExportError(f"{a.name} : pixvox mod n'enregistre pas encore la couleur de biome (tint={a.tint}) ; "
-                              "l'exporter avec pixvox export")
         if mc == "1.21.1":
             _check_props_1_21_1(a)
         infos.append(pack.add(a))           # ExportError si un modèle est invalide pour le jeu : pas de mod bancal
@@ -1477,7 +1579,8 @@ def _write_project(assets, root: Path, final: Path, modid, name, pkg, names, *, 
     if loader == "fabric":
         fmj = {"schemaVersion": 1, "id": modid, "version": "${version}", "name": title, "description": desc,
                "authors": list(authors), "license": license, "icon": f"assets/{modid}/icon.png", "environment": "*",
-               "entrypoints": {"main": [f"{pkg}.{main}"]},
+               "entrypoints": {"main": [f"{pkg}.{main}"],
+                               **({"client": [f"{pkg}.{main}Client"]} if ctx.tints else {})},
                "depends": {"fabricloader": f">={FABRIC['loader']}", "minecraft": f"~{FABRIC['minecraft']}",
                            "java": f">={FABRIC['java']}", "fabric-api": "*"}}
         (res / "fabric.mod.json").write_text(json.dumps(fmj, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

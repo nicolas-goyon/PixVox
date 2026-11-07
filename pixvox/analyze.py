@@ -209,7 +209,8 @@ def _tint_findings(asset, vol) -> list:
     colored = int((spread > 12).sum())
     if colored:
         out.append(Finding("WARN", "Teinte", f"{colored} voxels teintés ne sont pas gris (écart de canaux > 12) : la "
-                           "couleur du biome s'y mélange à la leur ; les peindre en niveaux de gris"))
+                           "couleur du biome s'y mélange à la leur ; les peindre en niveaux de gris (ramp(…, hue_shift=0, tint=0) : "
+                           "par défaut, ramp colore légèrement ses gris)"))
     else:
         out.append(Finding("OK", "Teinte", "voxels teintés en niveaux de gris"))
     if len(rgb) and rgb.max() < 140:

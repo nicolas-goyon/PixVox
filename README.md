@@ -49,7 +49,8 @@ construction.
   les fichiers de la version visée.
 - **Mods Minecraft 26.3** (Fabric ou NeoForge) : vrais blocs avec collision calculée depuis les voxels,
   lumière, particules, orientation, multiblocs posés d'un coup, tables de butin, test JUnit ; variantes en
-  vrais blocs vanilla (dalle, escalier, mur…) avec leurs tags, butin et recettes de taille.
+  vrais blocs vanilla (dalle, escalier, mur…) avec leurs tags, butin et recettes de taille ; couleurs de
+  biome des blocs teintés.
 
 ![Statue d'ange à 16 et 32 voxels par bloc, et en figurine](docs/images/resolutions.png)
 
@@ -125,6 +126,8 @@ ratée), `2` erreur d'utilisation ou d'environnement, `3` erreur interne.
 | `examples/lumenite_ore.py` | minerai 3D, cristaux sur une arête, lueur |
 | `examples/reinforced_crate.py` | planches peintes + cadre métallique cohérent sur les 12 arêtes |
 | `examples/mossy_stone.py` | avant / après : textures dessinées à part (conflits) vs mousse en voxels |
+| `examples/meadow_grass.py` | bloc d'herbe teinté par le biome : dessus `tintindex`, coulures en surcouche |
+| `examples/willow_leaves.py` | feuillage teinté avec trous creusés dans le volume (rendu cutout) |
 | `examples/mossy_stone_family.py` | dalle, escalier, mur, barrière, portillon, bouton, plaque tirés du bloc plein |
 | `examples/ashen_log.py` | cernes + écorce, blockstate `axis` |
 | `examples/glowcap.py` | modèle voxel libre → éléments + atlas |
@@ -142,8 +145,9 @@ ratée), `2` erreur d'utilisation ou d'environnement, `3` erreur interne.
   Minecraft 26.3 (Fabric, NeoForge) ou 1.21.1 (NeoForge, `--mc 1.21.1`, JDK 21) ; versions dans `pixvox/mod.py`.
 - Seules les textures s'animent (limite du jeu) ; pas de textures connectées.
 - Teinte de biome : couleurs de référence par biome (les colormaps vanilla ne sont pas versées) ; en jeu, la
-  couleur n'apparaît qu'avec un mod ou un `--replace` sur un bloc vanilla teinté du même genre (sinon gris).
-  Pas de plans teintés (`add_plane`), ni de variantes d'un bloc teinté.
+  couleur vient du biome réel avec `pixvox mod` (couleurs enregistrées côté client) ou un `--replace` sur un
+  bloc vanilla teinté du même genre ; sinon gris. Pas de plans teintés (`add_plane`), ni de variantes d'un
+  bloc teinté.
 - `Multipart` (parties affichées selon les propriétés du bloc) s'exporte en resource pack ; `pixvox mod` ne le
   génère pas, le bloc s'enregistre dans le mod qui le possède.
 - Variantes : pas de `--replace` (les blocs vanilla visés ont des propriétés) ; un bloc à surcouche lumineuse
