@@ -104,6 +104,10 @@ def test_materials_catalog_is_up_to_date():
     materiaux) : rendu et PNG déterministes, la CI le vérifie aussi."""
     require("scripts/readme_images.py", "docs/images/materiaux.png")
     import runpy
+    import sys
+    import unittest
+    if not sys.platform.startswith("linux"):           # polices des étiquettes propres à chaque système
+        raise unittest.SkipTest("catalogue comparé octet pour octet sous Linux seulement (job « exemples » de la CI)")
 
     from testkit import ROOT
     mod = runpy.run_path(str(ROOT / "scripts" / "readme_images.py"), run_name="readme_images")

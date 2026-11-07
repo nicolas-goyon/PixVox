@@ -103,7 +103,8 @@ def materials_catalog(size: int = 300, path: Path | None = None) -> Path:
 
 
 def check_catalog() -> int:
-    """Code 1 si docs/images/materiaux.png n'est plus à jour (la CI le vérifie : rendu et PNG déterministes)."""
+    """Code 1 si docs/images/materiaux.png n'est plus à jour (la CI le vérifie sous Linux : rendu et PNG
+    déterministes ; les polices des étiquettes diffèrent d'un système à l'autre)."""
     import tempfile
     with tempfile.TemporaryDirectory() as d:
         fresh = materials_catalog(path=Path(d) / "materiaux.png").read_bytes()
