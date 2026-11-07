@@ -158,6 +158,10 @@ class _Ctx:
         self.first_item = None
         self.checks: list = []          # (constante, nom, lumière, nb de parties ou 0) pour le test JUnit
         self.item_checks: list = []
+        self.variant_checks: list = []  # (constante, nom, classe vanilla, {propriété: valeurs}) pour le test JUnit
+        self.variant_classes: set = set()   # sous-classes à générer (constructeurs protégés du jeu)
+        self.item_tags: dict = {}
+        self.recipes: dict = {}
 
 
 def _props_java(p: Props, *, full: bool, immovable: bool = False, light_expr: str | None = None) -> str:
@@ -349,6 +353,134 @@ def _register_item(ctx: _Ctx, it: Item):
     ctx.summary.append((it.name, "item", None))
 
 
+WOOD_SOUNDS = ("wood", "cherry_wood", "bamboo_wood", "nether_wood")
+# variante -> (classe vanilla, tag de bloc, tag d'objet, tag « wooden_ » si le bloc sonne comme du bois)
+VARIANT_JAVA = {
+    "slab": ("SlabBlock", "slabs", "slabs", "wooden_slabs"),
+    "stairs": ("StairBlock", "stairs", "stairs", "wooden_stairs"),
+    "wall": ("WallBlock", "walls", "walls", None),
+    "fence": ("FenceBlock", "fences", "fences", "wooden_fences"),
+    "fence_gate": ("FenceGateBlock", "fence_gates", "fence_gates", None),
+    "button": ("ButtonBlock", "buttons", "buttons", "wooden_buttons"),
+    "pressure_plate": ("PressurePlateBlock", "pressure_plates", None, "wooden_pressure_plates"),
+}
+_VARIANT_NAMES = {"slab": ("Slab", "Dalle"), "stairs": ("Stairs", "Escalier"), "wall": ("Wall", "Mur"),
+                  "fence": ("Fence", "Barrière"), "fence_gate": ("Fence Gate", "Portillon"),
+                  "button": ("Button", "Bouton"), "pressure_plate": ("Pressure Plate", "Plaque de pression")}
+
+
+def _variant_names(ctx: _Ctx, v: Variant) -> None:
+    """Noms affichés : ceux des Props de la variante s'ils lui sont propres, sinon tirés du bloc plein
+    (« Mossy Stone Slab », « Dalle de pierre moussue »)."""
+    p = v.props
+    if p is not None and p is not v.base.props and p.names:
+        _names(ctx, "block", v.name, p)
+        return
+    bn = dict((v.base.props.names if v.base.props and v.base.props.names else {}) or {})
+    en_base = bn.get("en_us", _title(v.base.name))
+    en, fr = _VARIANT_NAMES[v.shape]
+    key = f"block.{ctx.modid}.{v.name}"
+    ctx.lang["en_us"][key] = f"{en_base} {en}"
+    fr_base = bn.get("fr_fr")                      # sans nom français, le bloc plein garde son nom anglais : idem
+    ctx.lang["fr_fr"][key] = f"{fr} de {fr_base[:1].lower() + fr_base[1:]}" if fr_base else f"{en_base} {en}"
+
+
+def _register_variant(ctx: _Ctx, v: Variant, base_const: str | None):
+    """Vrai bloc vanilla (SlabBlock, StairBlock, WallBlock…) : raccords, ouverture, appui gérés par le jeu ;
+    tags (minecraft:slabs, walls… : le mur et la barrière ne se raccordent qu'aux blocs de leur tag), table
+    de butin (dalle double = 2), recette de taille depuis le bloc plein s'il est dans le mod."""
+    p = v.props or Props()
+    const = _const(v.name)
+    cls, btag, itag, wtag = VARIANT_JAVA[v.shape]
+    wood = p.sound in WOOD_SOUNDS
+    opaque = v.base.effective_render_type() == "solid"
+    if v.shape in ("button", "pressure_plate"):
+        props = (f"BlockBehaviour.Properties.of().noCollision().strength(0.5f).sound(SoundType.{p.sound.upper()})"
+                 ".pushReaction(PushReaction.POPPED)" + (".requiresCorrectToolForDrops()" if p.requires_tool else ""))
+    else:
+        props = _props_java(p, full=opaque)
+    set_type = "BlockSetType.OAK" if wood else "BlockSetType.STONE"
+    base_state = "Blocks.STONE.defaultBlockState()"
+    if base_const:
+        base_state = f"{base_const}{'.get()' if ctx.loader == 'neoforge' else ''}.defaultBlockState()"
+    factory = {
+        "slab": "SlabBlock::new",
+        "stairs": f"p -> new PixvoxStairBlock({base_state}, p)",
+        "wall": "WallBlock::new",
+        "fence": "FenceBlock::new",
+        "fence_gate": "p -> new FenceGateBlock(WoodType.OAK, p)",
+        "button": f"p -> new PixvoxButtonBlock({set_type}, {30 if wood else 20}, p)",
+        "pressure_plate": f"p -> new PixvoxPressurePlateBlock({set_type}, p)",
+    }[v.shape]
+    if v.shape in ("stairs", "button", "pressure_plate"):
+        ctx.variant_classes.add(cls)
+    ctx.decls.append(("block", const, v.name, factory, props))
+    ctx.variant_checks.append((const, v.name, cls, v.properties))
+    _variant_names(ctx, v)
+    _tags(ctx, v.name, p)
+    ident = f"{ctx.modid}:{v.name}"
+    ctx.tags.setdefault(btag, []).append(ident)
+    if wood and wtag:
+        ctx.tags.setdefault(wtag, []).append(ident)
+    if itag:
+        ctx.item_tags.setdefault(itag, []).append(ident)
+    if v.shape == "slab":
+        _loot_slab(ctx, v.name)
+    else:
+        _loot(ctx, v.name)
+    if base_const:
+        n = 2 if v.shape == "slab" else 1
+        base_id = f"{ctx.modid}:{v.base.name}"
+        ctx.recipes[f"{v.name}_from_{v.base.name}_stonecutting"] = {
+            "type": "minecraft:stonecutting",
+            "ingredient": {"item": base_id} if ctx.mc == "1.21.1" else base_id,
+            "result": {"count": n, "id": ident}}
+    from .variants import LABELS
+    ctx.summary.append((v.name, f"{LABELS[v.shape]} de {v.base.name}", p))
+
+
+def _loot_slab(ctx: _Ctx, name: str) -> None:
+    """Table de butin d'une dalle, au format vanilla de chaque version : 2 dalles pour une dalle double."""
+    ident = f"{ctx.modid}:{name}"
+    if ctx.mc == "1.21.1":
+        entry = {"type": "minecraft:item", "name": ident, "functions": [
+            {"function": "minecraft:set_count", "add": False, "count": 2.0,
+             "conditions": [{"condition": "minecraft:block_state_property", "block": ident,
+                             "properties": {"type": "double"}}]},
+            {"function": "minecraft:explosion_decay"}]}
+        pool = {"bonus_rolls": 0.0, "entries": [entry], "rolls": 1.0}
+    else:
+        entry = {"type": "minecraft:item", "name": ident, "modifier": [
+            {"type": "minecraft:set_count", "count": 2,
+             "condition": {"type": "minecraft:match_block", "blocks": ident, "state": {"type": "double"}}},
+            {"type": "minecraft:explosion_decay"}]}
+        pool = {"entries": [entry], "rolls": 1}
+    ctx.loot[name] = {"type": "minecraft:block", "pools": [pool], "random_sequence": f"{ctx.modid}:blocks/{name}"}
+
+
+def _variant_classes(ctx: _Ctx) -> dict:
+    """Sous-classes publiques des blocs vanilla dont le constructeur est protégé (StairBlock, ButtonBlock,
+    PressurePlateBlock : vérifié par javap en 26.3 et 1.21.1)."""
+    pkg = ctx.pkg
+    src = {
+        "StairBlock": ("PixvoxStairBlock", "BlockState base, BlockBehaviour.Properties props", "base, props",
+                       "import net.minecraft.world.level.block.state.BlockState;\n"),
+        "ButtonBlock": ("PixvoxButtonBlock", "BlockSetType type, int ticks, BlockBehaviour.Properties props",
+                        "type, ticks, props", "import net.minecraft.world.level.block.state.properties.BlockSetType;\n"),
+        "PressurePlateBlock": ("PixvoxPressurePlateBlock", "BlockSetType type, BlockBehaviour.Properties props",
+                               "type, props", "import net.minecraft.world.level.block.state.properties.BlockSetType;\n"),
+    }
+    files = {}
+    for cls in sorted(ctx.variant_classes):
+        name, params, args, imp = src[cls]
+        files[f"block/{name}.java"] = (f"package {pkg}.block;\n\nimport net.minecraft.world.level.block.{cls};\n"
+                                       f"import net.minecraft.world.level.block.state.BlockBehaviour;\n{imp}\n"
+                                       f"/** {cls} vanilla (constructeur protégé dans le jeu), généré par pixvox. */\n"
+                                       f"public class {name} extends {cls} {{\n"
+                                       f"    public {name}({params}) {{\n        super({args});\n    }}\n}}\n")
+    return files
+
+
 # ============================================================================ sources Java
 _SHAPE_HELPERS = '''
     /** "x0,y0,z0,x1,y1,z1;…" en pixels (0–16), comme Block.box. */
@@ -405,9 +537,16 @@ import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.FenceBlock;
+import net.minecraft.world.level.block.FenceGateBlock;
 import net.minecraft.world.level.block.RotatedPillarBlock;
+import net.minecraft.world.level.block.SlabBlock;
 import net.minecraft.world.level.block.SoundType;
+import net.minecraft.world.level.block.WallBlock;
 import net.minecraft.world.level.block.state.BlockBehaviour;
+import net.minecraft.world.level.block.state.properties.BlockSetType;
+import net.minecraft.world.level.block.state.properties.WoodType;
 import net.minecraft.world.level.material.PushReaction;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
@@ -599,6 +738,7 @@ _RENAMES_1_21_1 = (
     ("BLOCKS.registerBlock(name, factory, props)", "BLOCKS.registerBlock(name, factory, props.get())"),
     (".noCollision()", ".noCollission()"),
     ("PushReaction.IMMOVEABLE", "PushReaction.BLOCK"),
+    ("PushReaction.POPPED", "PushReaction.DESTROY"),           # cassé quand un piston le pousse
     ("BuiltInRegistries.BLOCK.getValue(", "BuiltInRegistries.BLOCK.get("),
     ("BuiltInRegistries.ITEM.getValue(", "BuiltInRegistries.ITEM.get("),
 )
@@ -638,6 +778,7 @@ def _java_files_26(ctx: _Ctx) -> dict:
     """Sources Java : point d'entrée + ModContent (selon le chargeur) et classes de blocs (communes)."""
     pkg = ctx.pkg
     files = _fabric_files(ctx) if ctx.loader == "fabric" else _neoforge_files(ctx)
+    files.update(_variant_classes(ctx))
     files["block/Fx.java"] = f'''package {pkg}.block;
 
 import net.minecraft.core.BlockPos;
@@ -1028,6 +1169,10 @@ def _test_java_26(ctx: _Ctx) -> str:
     blocks = "\n".join(f'        check("{n}", ModContent.{c}{get}, {light}, {parts});' for c, n, light, parts in ctx.checks)
     items = "\n".join(f'        assertSame(ModContent.{c}{get}, BuiltInRegistries.ITEM.getValue({main}.id("{n}")), "{n}");'
                       for c, n in ctx.item_checks)
+    variants = "\n".join(
+        f'        checkVariant("{n}", ModContent.{c}{get}, {cls}.class, new String[][]{{'
+        + ", ".join("{" + ", ".join(f'"{x}"' for x in [k, *vals]) + "}" for k, vals in props.items()) + "});"
+        for c, n, cls, props in ctx.variant_checks)
     if neo:
         boot = ("    // NeoForge (FML JUnit) : le jeu est déjà amorcé avec le mod chargé avant les tests.\n")
         boot_imports = ""
@@ -1055,10 +1200,14 @@ import static org.junit.jupiter.api.Assertions.*;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.level.EmptyBlockGetter;
-import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.*;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import org.junit.jupiter.api.Test;
+
+import java.util.Arrays;
+import java.util.TreeSet;
 
 import {pkg}.block.PixvoxMultiBlock;
 
@@ -1095,9 +1244,33 @@ public class GeneratedContentTest {{
         }}
     }}
 
+    /** Variante de construction : vrai bloc vanilla, et chaque propriété du blockstate écrit par pixvox
+     *  existe dans le jeu avec exactement les mêmes valeurs. */
+    static void checkVariant(String name, Block expected, Class<?> cls, String[][] props) {{
+        Block b = BuiltInRegistries.BLOCK.getValue({main}.id(name));
+        assertSame(expected, b, name);
+        assertSame(BuiltInRegistries.ITEM.getValue({main}.id(name)), b.asItem(), name + " : item");
+        assertTrue(cls.isInstance(b), name + " : " + cls.getSimpleName() + " attendu");
+        for (String[] p : props) {{
+            Property<?> prop = b.getStateDefinition().getProperty(p[0]);
+            assertNotNull(prop, name + " : propriété " + p[0]);
+            TreeSet<String> got = new TreeSet<>();
+            for (Object v : prop.getPossibleValues()) got.add(valueName(prop, v));
+            assertEquals(new TreeSet<>(Arrays.asList(p).subList(1, p.length)), got, name + " : valeurs de " + p[0]);
+        }}
+        assertFalse(b.defaultBlockState().getShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO,
+                CollisionContext.empty()).isEmpty(), name + " : forme vide");
+    }}
+
+    @SuppressWarnings({{"unchecked", "rawtypes"}})
+    static String valueName(Property prop, Object value) {{
+        return prop.getName((Comparable) value);
+    }}
+
     @Test
     void content() {{
 {blocks}
+{variants}
 {items}
 {list_check}
     }}
@@ -1235,9 +1408,6 @@ def _write_project(assets, root: Path, final: Path, modid, name, pkg, names, *, 
         if isinstance(a, Multipart):
             raise ExportError(f"{a.name} : pixvox mod ne génère pas encore de Multipart ; l'exporter avec pixvox export "
                               "et enregistrer le bloc et ses propriétés dans le mod")
-        if isinstance(a, Variant):
-            raise ExportError(f"{a.name} : pixvox mod ne génère pas encore de variantes de construction ({a.shape}) ; "
-                              "l'exporter avec pixvox export")
         if mc == "1.21.1":
             _check_props_1_21_1(a)
         infos.append(pack.add(a))           # ExportError si un modèle est invalide pour le jeu : pas de mod bancal
@@ -1252,8 +1422,16 @@ def _write_project(assets, root: Path, final: Path, modid, name, pkg, names, *, 
             _register_model(ctx, a)
         elif isinstance(a, Item):
             _register_item(ctx, a)
+        else:
+            continue
         if ctx.first_item is None:
             ctx.first_item = _const(a.name)
+    in_mod = {a.name for a in assets if isinstance(a, Block)}
+    for a in assets:                    # après les blocs pleins : l'escalier lit l'état de son bloc plein
+        if isinstance(a, Variant):
+            _register_variant(ctx, a, _const(a.base.name) if a.base.name in in_mod else None)
+            if ctx.first_item is None:
+                ctx.first_item = _const(a.name)
     # ressources propres au mod
     for n, bs in ctx.blockstates.items():
         (res / "assets" / modid / "blockstates" / f"{n}.json").write_text(dumps(bs) + "\n", encoding="utf-8")
@@ -1268,10 +1446,15 @@ def _write_project(assets, root: Path, final: Path, modid, name, pkg, names, *, 
         p = res / "data" / modid / "loot_table" / "blocks" / f"{n}.json"
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps(lt, indent=2) + "\n", encoding="utf-8")
-    for tag, vals in ctx.tags.items():
-        p = res / "data" / "minecraft" / "tags" / "block" / f"{tag}.json"
+    for kind, tags in (("block", ctx.tags), ("item", ctx.item_tags)):
+        for tag, vals in tags.items():
+            p = res / "data" / "minecraft" / "tags" / kind / f"{tag}.json"
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(json.dumps({"values": vals}, indent=2) + "\n", encoding="utf-8")
+    for n, r in ctx.recipes.items():
+        p = res / "data" / modid / "recipe" / f"{n}.json"
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps({"values": vals}, indent=2) + "\n", encoding="utf-8")
+        p.write_text(json.dumps(r, indent=2) + "\n", encoding="utf-8")
     if pack.icon_img is not None:
         from .png import save_png
         save_png(res / "assets" / modid / "icon.png", pack.icon_img)

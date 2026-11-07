@@ -17,8 +17,19 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; ve
   d'inventaire. Les deux cibles (`1.21.4+`, `1.21.1`). La vérification relit chaque état du blockstate (17
   configurations pour le mur) en plus de l'objet ; un test compare la géométrie de l'escalier et du bouton
   aux blockstates vanilla. Planche : objet, scène posée sur le bloc plein, états caractéristiques. Nouveau
-  `kind` JSON : `variant` (`details.shape`, `base`, `models`, `states`). `--replace` et `pixvox mod`
-  refusent les variantes (code 1) ; un bloc à surcouche lumineuse ne se décline pas.
+  `kind` JSON : `variant` (`details.shape`, `base`, `models`, `states`). `--replace` refuse les variantes
+  (code 1) ; un bloc à surcouche lumineuse ne se décline pas. Exemple : `examples/mossy_stone_family.py`.
+- Variantes dans les mods (#22) : vrais blocs vanilla (`SlabBlock`, `StairBlock`, `WallBlock`, `FenceBlock`,
+  `FenceGateBlock`, `ButtonBlock`, `PressurePlateBlock` ; sous-classes générées pour les constructeurs
+  protégés), Fabric et NeoForge 26.3, NeoForge 1.21.1. Tags de blocs et d'objets (`slabs`, `stairs`, `walls`,
+  `fences`… et `wooden_*` pour un bloc qui sonne comme du bois : le mur et la barrière ne se raccordent qu'aux
+  blocs de leur tag). Dalle double : 2 dalles (table de butin au format de chaque version). Recettes de
+  taille depuis le bloc plein s'il est dans le mod (dalle × 2). Escalier : état du bloc plein, ou de la
+  pierre s'il est absent. Bouton et plaque : sans collision, résistance 0,5 ; bois : déclenchés par tout et
+  30 ticks, sinon par les créatures seulement et 20 ticks. Noms affichés tirés du bloc plein (« Dalle de … »).
+  Le test JUnit vérifie chaque variante : classe vanilla, et chaque propriété du blockstate écrit existe dans
+  le jeu avec les mêmes valeurs. Géométrie des 263 états comparée aux blocs vanilla du jar 1.21.1 : identique
+  (l'objet de la barrière garde ses traverses dans le bloc).
 - `ModelLoader.blockstate_quads` lit aussi les blockstates à variantes.
 
 ## [0.2.0]
