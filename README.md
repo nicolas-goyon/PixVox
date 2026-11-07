@@ -37,6 +37,9 @@ construction.
 - **Variantes de construction** : `bloc.variants("slab", "stairs", "wall", …)` décline un bloc plein en
   dalle, escalier, mur, barrière, portillon, bouton et plaque de pression, avec ses textures (mêmes
   raccords) ; modèles et blockstates au format vanilla, chaque état relu et vérifié.
+- **Teinte de biome** : herbe, feuillages, eau (`tint="grass"`, masque `tinted` des voxels peints en gris) ;
+  `tintindex` sur les faces entièrement teintées, surcouche teintée sur les faces mixtes (comme le liseré de
+  l'herbe vanilla) ; planche dans trois biomes, vérification avec la couleur du biome.
 - **Planches de revue** : inventaire, dessous en perspective, monde 3×3×3, nuit, taille réelle, patron
   des textures, analyse (raccords, palette, boucle d'animation…), GIF.
 - **Export vérifié** : chaque modèle et chaque texture écrits sur disque sont relus et rendus comme le
@@ -110,7 +113,7 @@ ratée), `2` erreur d'utilisation ou d'environnement, `3` erreur interne.
 | `pixvox review F.py` | planche PNG + rapport (+ planche d'animation et GIF) |
 | `pixvox export F.py… --pack D --zip Z [--mc 1.21.1]` | resource pack vérifié (+ datapack de placement des multiblocs) ; `--mc 1.21.1` pour NeoForge 1.21.1 |
 | `pixvox mod F.py… --modid ID [--loader neoforge] --build` | projet de mod + `.jar` |
-| `pixvox view F.py --yaw 135 --pitch 20 [--persp 2] [--shading night] [--tick 6]` | angle libre |
+| `pixvox view F.py --yaw 135 --pitch 20 [--persp 2] [--shading night] [--tick 6] [--biome swamp]` | angle libre |
 | `pixvox anim F.py` / `compare F.py…` / `ascii F.py --face north` | animation, variantes, pixels exacts |
 | `pixvox render-model PACK ns:block/nom [--mc 1.21.1]` | aperçu d'un modèle JSON quelconque (pack fait main, Blockbench), lu comme la version choisie |
 | `pixvox doctor` / `summary result.json` | diagnostic / résumé Markdown d'un résultat `--json` |
@@ -137,7 +140,10 @@ ratée), `2` erreur d'utilisation ou d'environnement, `3` erreur interne.
 
 - Java Edition uniquement (pas Bedrock) ; resource packs pour 1.21.4 → 26.3 ou 1.21.1, mods pour
   Minecraft 26.3 (Fabric, NeoForge) ou 1.21.1 (NeoForge, `--mc 1.21.1`, JDK 21) ; versions dans `pixvox/mod.py`.
-- Seules les textures s'animent (limite du jeu) ; pas de tintes de biome ni de textures connectées.
+- Seules les textures s'animent (limite du jeu) ; pas de textures connectées.
+- Teinte de biome : couleurs de référence par biome (les colormaps vanilla ne sont pas versées) ; en jeu, la
+  couleur n'apparaît qu'avec un mod ou un `--replace` sur un bloc vanilla teinté du même genre (sinon gris).
+  Pas de plans teintés (`add_plane`), ni de variantes d'un bloc teinté.
 - `Multipart` (parties affichées selon les propriétés du bloc) s'exporte en resource pack ; `pixvox mod` ne le
   génère pas, le bloc s'enregistre dans le mod qui le possède.
 - Variantes : pas de `--replace` (les blocs vanilla visés ont des propriétés) ; un bloc à surcouche lumineuse

@@ -37,6 +37,7 @@ from pathlib import Path
 
 from . import __version__
 from ._io import OutputDirError, say
+from .tint import BIOMES
 
 SCHEMA = "pixvox.result/2"          # /2 : export indique la version de Minecraft visée (champ mc)
 EXIT_OK, EXIT_FAILED, EXIT_USAGE, EXIT_INTERNAL = 0, 1, 2, 3
@@ -199,7 +200,7 @@ def cmd_view(args, out) -> int:
     entries = []
     for f, a in _load_many([args.file], args.only):
         path = view(a, args.yaw, args.pitch, args.size, args.shading, out_dir=args.out, persp=args.persp,
-                    tick=args.tick)
+                    tick=args.tick, biome=args.biome)
         say(path)
         entries.append({**_entry(f, a), "image": path})
     out["assets"] = entries
@@ -529,6 +530,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="gui = icône d'inventaire, world = ombrage en jeu, night = la nuit (seules les faces "
                         "light_emission restent claires), flat = couleurs brutes")
     v.add_argument("--tick", type=float, default=0, help="instant d'une animation (20 ticks = 1 s)")
+    v.add_argument("--biome", default=None, choices=sorted(BIOMES),
+                   help="couleur des voxels teintés (tint) : plains par défaut")
     v.add_argument("--persp", type=float, default=0.0,
                    help="perspective : 0 = orthographique ; 1.5–3 = distance de l'œil en diagonales de l'objet")
     v.add_argument("--only", help=only_help)

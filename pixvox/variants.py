@@ -154,6 +154,9 @@ class Variant(Asset):
         if base.emissive is not None:
             raise ValueError(f"{base.name} : surcouche lumineuse (emissive) non prise en charge par les variantes ; "
                              "les dériver d'un bloc sans emissive")
+        if base.tint is not None:
+            raise ValueError(f"{base.name} : teinte de biome (tint) non prise en charge par les variantes ; les dériver "
+                             "d'un bloc sans tint")
         super().__init__(name or f"{base.name}_{shape}", notes)
         self.base = base
         self.shape = shape

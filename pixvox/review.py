@@ -273,12 +273,14 @@ def _sheet_block(b: Block, findings) -> Image.Image:
     else:
         src = f"textures fournies telles quelles — {len(b.conflicts)} voxels d'arête en conflit (magenta)"
     n = b.volume.shape[0]
-    _header(cv, b.name, f"bloc plein {n}³{' (HD)' if n > 16 else ''} · rendu {b.effective_render_type()} · {src}")
-    qc = cube_quads(faces)
+    tint = f" · teinte {b.tint} (biome)" if b.tint else ""
+    _header(cv, b.name, f"bloc plein {n}³{' (HD)' if n > 16 else ''} · rendu {b.effective_render_type()} · {src}{tint}")
+    qc = cube_quads(b.tinted_faces_at())                 # vues : teinte de la plaine ; patron : textures exportées
     P = 360
     x = 16
     glow = b.glow_faces() if b.emissive is not None else {}
-    world = ("Monde 3×3×3 (raccords, ombrage en jeu)", INVENTORY, "world", tiled_cube_quads(faces), 0)
+    world = ("Monde 3×3×3 (raccords, ombrage en jeu)" if not b.tint else "Monde 2×2×2 dans trois biomes (ombrage en jeu)",
+             INVENTORY, "world", tiled_cube_quads(b.tinted_faces_at()), 0)
     if glow:
         world = ("Monde 3×3×3 la nuit (pixels lumineux)", INVENTORY, "night",
                  tiled_cube_quads(faces, glow=glow, emission=b.emission), 0)
@@ -287,9 +289,12 @@ def _sheet_block(b: Block, findings) -> Image.Image:
             ("Dessous (perspective) · OUEST à g. · SUD à dr.", BACK, "world", qc, PERSP_BELOW),
             world):
         box = _panel(cv, x, 50, P + 10, P + 36, title)
-        img = render(quads, fit_camera(quads, view, P, P, 0.06, persp=persp), shading=shading,
-                     bg=(10, 12, 20, 255) if shading == "night" else None)
-        _paste_center(cv, _img(img), box)
+        if b.tint and quads is world[3]:
+            _biome_strip(cv, box, b, P)
+        else:
+            img = render(quads, fit_camera(quads, view, P, P, 0.06, persp=persp), shading=shading,
+                         bg=(10, 12, 20, 255) if shading == "night" else None)
+            _paste_center(cv, _img(img), box)
         x += P + 26
     # taille réelle + palette
     box = _panel(cv, x, 50, W - x - 16, P + 36, "Taille réelle ×1 ×2 ×3 ×4 · valeurs")
@@ -308,6 +313,18 @@ def _sheet_block(b: Block, findings) -> Image.Image:
     cv.alpha_composite(net, (box[0] + 10, box[1] + 4))
     ax = 16 + net.width + 36
     return _analysis_panel(cv, ax, 50 + P + 52, W - ax - 16, findings)
+
+
+def _biome_strip(cv, box, b: Block, P: int) -> None:
+    """Monde 2×2×2 du bloc dans trois biomes (couleurs de référence de pixvox.tint), côte à côte."""
+    from .tint import REVIEW_BIOMES
+    w = (box[2] - 20) // len(REVIEW_BIOMES)
+    d = ImageDraw.Draw(cv)
+    for i, biome in enumerate(REVIEW_BIOMES):
+        q = tiled_cube_quads(b.tinted_faces_at(0, biome), n=(2, 2, 2))
+        img = _img(render(q, fit_camera(q, INVENTORY, w, P - 30, 0.05), shading="world"))
+        cv.alpha_composite(img, (box[0] + 10 + i * w, box[1] + 26))
+        d.text((box[0] + 10 + i * w + w // 2 - 6 * len(biome) // 2, box[1] + 6), biome, font=font(12), fill=MUTED)
 
 
 def _sheet_model(m: Model, findings) -> Image.Image:
@@ -666,19 +683,22 @@ def anim_sheet(asset, out_dir="out", size: int = 150, gif_size: int = 220, max_f
     del period
     return png, gif
 
-def asset_quads(asset, tick: float = 0) -> list:
+def asset_quads(asset, tick: float = 0, biome: str | None = None) -> list:
     """Géométrie de rendu de n'importe quel asset au tick donné (objet entier pour un multibloc,
-    plans texturés compris pour un modèle)."""
+    plans texturés compris pour un modèle) ; biome : couleur des voxels teintés d'un Block ou d'un Model."""
+    if biome is not None and getattr(asset, "tint", None):
+        return asset.quads(tick, biome=biome)
     return asset.quads(tick)
 
 
 def view(asset, yaw: float, pitch: float, size: int = 600, shading: str = "gui", path=None,
-         out_dir="out", persp: float = 0.0, tick: float = 0) -> Path:
+         out_dir="out", persp: float = 0.0, tick: float = 0, biome: str | None = None) -> Path:
     """Rendu libre (angle quelconque) pour inspecter un détail. Les items sont montrés extrudés
     comme en main / au sol (item/generated). persp > 0 : perspective (1.5–3 ; conseillé pour les vues
     par dessous). shading='night' : la nuit, seules les faces à light_emission restent claires.
-    tick : instant d'une animation. Fichier : <out_dir>/<nom>.view_<yaw>_<pitch>.png."""
-    q = asset_quads(asset, tick)
+    tick : instant d'une animation ; biome : couleur des voxels teintés (plaine par défaut, voir pixvox.tint).
+    Fichier : <out_dir>/<nom>.view_<yaw>_<pitch>.png."""
+    q = asset_quads(asset, tick, biome)
     bg = (10, 12, 20, 255) if shading == "night" else BG
     img = render(q, fit_camera(q, (yaw, pitch), size, size, 0.05, persp=persp), shading=shading, bg=bg)
     p = Path(path) if path else Path(out_dir) / f"{asset.name}.view_{int(yaw)}_{int(pitch)}.png"

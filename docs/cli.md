@@ -20,7 +20,7 @@ python -m pixvox …        # équivalent, utile sans installation (depuis un cl
 | `pixvox review F.py… [--out D] [--only NOM] [--fail-on never\|warn\|err]` | planche de revue + rapport (+ planche d'animation et GIF) | `D/<nom>.review.png`, `.report.txt`, `.anim.png`, `.anim.gif` |
 | `pixvox export F.py… [--pack D] [--ns NS] [--zip Z] [--replace nom=minecraft:bloc] [--mc 1.21.4+\|1.21.1] [--textures flat\|folders]` | resource pack Java vérifié par re-rendu, pour 1.21.4 → 26.3 (défaut) ou 1.21.1 (NeoForge 21.1) | `D/` (+ `Z`, `D_datapack/` pour les multiblocs) |
 | `pixvox mod F.py… --modid ID [--loader fabric\|neoforge] [--mc 26.3\|1.21.1] [--build] [--java-home J] [--zip Z]` | projet de mod Minecraft 26.3, ou 1.21.1 avec NeoForge (+ `.jar` avec `--build`) | `out/mod_ID_LOADER/` |
-| `pixvox view F.py --yaw Y --pitch P [--persp 2] [--shading gui\|world\|night\|flat] [--tick T]` | rendu à un angle libre | `out/<nom>.view_Y_P.png` |
+| `pixvox view F.py --yaw Y --pitch P [--persp 2] [--shading gui\|world\|night\|flat] [--tick T] [--biome B]` | rendu à un angle libre (`--biome` : couleur des voxels teintés) | `out/<nom>.view_Y_P.png` |
 | `pixvox anim F.py…` | images d'une animation + GIF | `out/<nom>.anim.png`, `.anim.gif` |
 | `pixvox compare F.py… [--out IMG]` | variantes côte à côte | `IMG` |
 | `pixvox ascii F.py [--face up\|…]` | pixels exacts en texte | (sortie standard) |
@@ -109,6 +109,11 @@ textures d'items restent dans `textures/item/`.
 
 Un asset `multipart` : `details.parts`, `details.models` (fichiers de modèles écrits), `details.states` (états
 du blockstate relus et comparés : jusqu'à 16 ensembles de parties, le plus grand dans chaque direction).
+
+Un bloc ou un modèle teinté (`tint`) : `details.tint` (`grass`, `foliage` ou `water`) ; un bloc ajoute
+`details.tint_faces` (faces teintées, entières ou par surcouche), un modèle `details.tinted_elements`. La
+vérification relit les faces à `tintindex` avec la couleur de la plaine (`pixvox.tint`) ; `warnings` rappelle
+que, sans mod, seul un `--replace` sur un bloc vanilla teinté du même genre affiche la couleur du biome.
 
 Une variante de construction (`variant`) : `details.shape` (`slab`, `stairs`, `wall`, `fence`, `fence_gate`,
 `button`, `pressure_plate`), `details.base` (bloc plein dont elle reprend les textures), `details.models`
