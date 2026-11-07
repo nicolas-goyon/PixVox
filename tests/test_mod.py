@@ -159,6 +159,7 @@ def test_mod_registers_construction_variants():
             assert f"new PixvoxStairBlock(PLAIN_TEST{get}.defaultBlockState(), p)" in content
             assert "SlabBlock::new" in content and "new FenceGateBlock(WoodType.OAK, p)" in content
             assert "new PixvoxButtonBlock(BlockSetType.OAK, 30, p)" in content           # bois : 30 ticks
+            assert f"PushReaction.{'DESTROY' if mc == '1.21.1' else 'POPPED'}" in content   # nom selon la version
             for cls in ("PixvoxStairBlock", "PixvoxButtonBlock", "PixvoxPressurePlateBlock"):
                 assert (java / f"block/{cls}.java").exists(), cls
             test = (root / "src/test/java/pixvox/pv_test/GeneratedContentTest.java").read_text(encoding="utf-8")

@@ -396,7 +396,7 @@ def _register_variant(ctx: _Ctx, v: Variant, base_const: str | None):
     opaque = v.base.effective_render_type() == "solid"
     if v.shape in ("button", "pressure_plate"):
         props = (f"BlockBehaviour.Properties.of().noCollision().strength(0.5f).sound(SoundType.{p.sound.upper()})"
-                 ".pushReaction(PushReaction.DESTROY)" + (".requiresCorrectToolForDrops()" if p.requires_tool else ""))
+                 ".pushReaction(PushReaction.POPPED)" + (".requiresCorrectToolForDrops()" if p.requires_tool else ""))
     else:
         props = _props_java(p, full=opaque)
     set_type = "BlockSetType.OAK" if wood else "BlockSetType.STONE"
@@ -738,6 +738,7 @@ _RENAMES_1_21_1 = (
     ("BLOCKS.registerBlock(name, factory, props)", "BLOCKS.registerBlock(name, factory, props.get())"),
     (".noCollision()", ".noCollission()"),
     ("PushReaction.IMMOVEABLE", "PushReaction.BLOCK"),
+    ("PushReaction.POPPED", "PushReaction.DESTROY"),           # cassé quand un piston le pousse
     ("BuiltInRegistries.BLOCK.getValue(", "BuiltInRegistries.BLOCK.get("),
     ("BuiltInRegistries.ITEM.getValue(", "BuiltInRegistries.ITEM.get("),
 )
