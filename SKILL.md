@@ -90,6 +90,7 @@ ou environnement / 3 interne (contrat : `docs/cli.md`). `python -m pixvox summar
 | dalle, escalier, mur, barrière, portillon, bouton, plaque d'un matériau | `bloc.variants("slab", "stairs", …)` (toutes si rien) : textures du bloc plein projetées, mêmes raccords ; vrais blocs vanilla dans un mod |
 | même objet à plusieurs tailles / finesses | décrire en unités de conception : `Volume.design(extent, res=, scale=)` |
 | animation (feu, lave, braises, runes) | liste de volumes (`v.frames(n)` + `pulse` / `flow`), `fire()` + `add_cross` |
+| retoucher un modèle existant (JSON d'un pack, du jeu, Blockbench) | `pixvox import PACK ns:block/nom --out f.py` (ou `.bbmodel`) puis retoucher le volume ; `import_model(…).to_model()` en Python |
 | planches, briques, pierre de taille, minerai, métal | `pixvox.materials` : `planks(v, wood=…)`, `bricks(v)`, `cut_stone(v)`, `glow = ore(v, crystal=…)`, `metal(v, patina=…)` ; `pixvox new NOM --material bricks` |
 | herbe, feuillages, eau (couleur du biome) | `tint="grass" \| "foliage" \| "water"` (+ `tinted=masque`, tout le volume sinon) sur Block / Model, voxels peints en gris |
 | itérer à la main sur un asset (humain) | `pixvox watch F.py --html` : planche refaite à chaque sauvegarde ; un agent garde `pixvox review` |
@@ -256,6 +257,11 @@ perlin(shape, cells=4, seed=0, octaves=1)   # shape 2D, 3D… ou 4D (x, y, z, te
 - **Caisse / machine** (`reinforced_crate.py`) : panneaux `paint_face(f, sp, at=(2,2))`, cadre éclairé en
   3D, `seamless=False`.
 - **Herbe / mousse** (`mossy_stone.py`) : `cap(MOSS, depth=(1,4))` + `seamless="horizontal"`.
+- **Partir d'un modèle existant** : `pixvox import client.jar minecraft:block/lantern --out lanterne.py --mc
+  1.21.1` (ou un dossier de pack, un .zip, un `.bbmodel`) écrit un fichier d'asset : volume en tranches ASCII
+  éditables (ou `.npz` s'il y a trop de couleurs), plans (`add_plane`) en PNG à côté. Lire les avertissements :
+  détail plus fin que la grille (`--res 32`), élément tourné de 22,5° (escaliers de voxels), texture animée
+  (première image seulement), plan horizontal ignoré. Ne pas verser dans le dépôt un modèle importé du jeu.
 - **Matériaux** (`examples/materials.py`, planche `docs/images/materiaux.png`) : partir d'une recette de
   `pixvox.materials` plutôt que de refaire planches et briques à la main. Motifs à période qui divise 16 et
   joints placés hors des couches de bord : jamais une face entière en mortier ; les briques à cheval sur deux

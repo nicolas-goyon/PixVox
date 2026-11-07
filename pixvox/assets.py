@@ -471,6 +471,14 @@ class Model(Asset, _Animated):
     def bounds(self):
         """Boîte englobante des voxels pleins (et des plans), en unités modèle : (min, max)."""
         xs, ys, zs = np.nonzero(self.volume.solid)
+        if not len(xs):                                   # modèle fait seulement de plans (fleur, plante)
+            if not self.planes:
+                raise ValueError(f"{self.name} : modèle vide (ni voxel ni plan)")
+            lo, hi = np.full(3, np.inf), np.full(3, -np.inf)
+            for p in self.planes:
+                a, b = p.bounds()
+                lo, hi = np.minimum(lo, a), np.maximum(hi, b)
+            return lo, hi
         lo = np.array([xs.min(), ys.min(), zs.min()], float) * self.voxel_size + np.array(self.origin)
         hi = np.array([xs.max() + 1, ys.max() + 1, zs.max() + 1], float) * self.voxel_size + np.array(self.origin)
         for p in self.planes:
