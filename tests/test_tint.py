@@ -95,8 +95,7 @@ def test_tinted_assets_export_verified_on_both_targets():
 
 
 def test_tint_refusals_and_review():
-    from pixvox import Block, Volume, export_mod
-    from pixvox.export import ExportError
+    from pixvox import Block, Volume
     from pixvox.review import review_data
     v = Volume(16, fill="#808080")
     em = np.zeros(v.shape, bool)
@@ -106,6 +105,39 @@ def test_tint_refusals_and_review():
     _raises(ValueError, "à la fois teinté", lambda: Block("x", v, tint="grass", emissive=em))
     _raises(ValueError, "teinte de biome", lambda: _leaves().variants("slab"))
     with tmpdir() as tmp:
-        _raises(ExportError, "couleur de biome", lambda: export_mod([_turf()], tmp / "mod", "demo"))
         r = review_data(_turf(), tmp)
         assert r["sheet"].exists() and "Teinte" in r["report"] and "niveaux de gris" in r["report"]
+
+
+def test_mod_registers_biome_colors_client_side():
+    """Couleurs de biome enregistrées côté client : BlockTintSources en 26.3 (Fabric : ClientModInitializer ;
+    NeoForge : RegisterColorHandlersEvent.BlockTintSources, appelé si Dist est client), BlockColor et ItemColor
+    en 1.21.1. Un mod sans bloc teinté ne change pas."""
+    from pixvox import Block, Volume, export_mod
+    plain = Block("plain_test", Volume(16, fill="#808080"))
+    for loader, mc in (("fabric", "26.3"), ("neoforge", "26.3"), ("neoforge", "1.21.1")):
+        with tmpdir() as tmp:
+            root = export_mod([_turf(), _leaves(), _basin(), plain], tmp / "mod", "pv_test", loader=loader, mc=mc,
+                              quiet=True)["project"]
+            java = root / "src/main/java/pixvox/pv_test"
+            if loader == "fabric":
+                client = (java / "PvTestModClient.java").read_text(encoding="utf-8")
+                assert "BlockColorRegistry.register(List.of(BlockTintSources.grass()), ModContent.TURF_TEST);" in client
+                assert "BlockTintSources.water()), ModContent.BASIN_TEST" in client
+                fmj = json.loads((root / "src/main/resources/fabric.mod.json").read_text(encoding="utf-8"))
+                assert fmj["entrypoints"]["client"] == ["pixvox.pv_test.PvTestModClient"]
+            else:
+                main = (java / "PvTestMod.java").read_text(encoding="utf-8")
+                assert "if (dist.isClient()) ModClient.register(modEventBus);" in main
+                client = (java / "ModClient.java").read_text(encoding="utf-8")
+                if mc == "1.21.1":
+                    assert "BiomeColors.getAverageFoliageColor(level, pos) : FoliageColor.getDefaultColor(), " \
+                           "ModContent.LEAVES_TEST.get());" in client
+                    assert "event.register((stack, tintIndex) -> 0xFF000000 | GrassColor.getDefaultColor()" in client
+                else:
+                    assert "RegisterColorHandlersEvent.BlockTintSources event" in client
+                    assert "event.register(List.of(BlockTintSources.foliage()), ModContent.LEAVES_TEST.get());" in client
+        with tmpdir() as tmp:                                   # sans bloc teinté : rien de client
+            root = export_mod([plain], tmp / "mod", "pv_test", loader=loader, mc=mc, quiet=True)["project"]
+            java = root / "src/main/java/pixvox/pv_test"
+            assert not (java / "ModClient.java").exists() and not (java / "PvTestModClient.java").exists()

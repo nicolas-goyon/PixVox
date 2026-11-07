@@ -40,7 +40,14 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; ve
   compare à la couleur de la plaine (et voit une teinte oubliée). Planche du bloc dans trois biomes, vues et
   taille réelle teintées, analyse (voxels teintés gris et assez clairs), `pixvox view --biome`. JSON :
   `details.tint`, `tint_faces` / `tinted_elements`. Sans mod, l'export rappelle que seul `--replace` sur un
-  bloc vanilla teinté affiche la couleur ; `pixvox mod` refuse pour l'instant (code 1), les variantes aussi.
+  bloc vanilla teinté affiche la couleur ; les variantes d'un bloc teinté sont refusées. Exemples :
+  `examples/meadow_grass.py` (herbe), `examples/willow_leaves.py` (feuillage).
+- Couleurs de biome dans les mods (#23), côté client seulement : 26.3, `BlockTintSources.grass()` / `foliage()` /
+  `water()` enregistrées par `BlockColorRegistry` (Fabric, point d'entrée `client`) ou
+  `RegisterColorHandlersEvent.BlockTintSources` (NeoForge), la teinte des objets venant de `items/<nom>.json` ;
+  1.21.1, `BlockColor` (`BiomeColors.getAverage…Color`, couleur par défaut hors du monde) et `ItemColor`. Le
+  point d'entrée NeoForge reçoit `Dist` et n'appelle le code client que sur le client. Noms vérifiés par
+  javap dans les jars des deux versions ; un mod sans bloc teinté ne change pas.
 
 ## [0.2.0]
 
