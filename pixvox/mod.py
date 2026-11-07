@@ -1269,8 +1269,8 @@ def _write_project(assets, root: Path, final: Path, modid, name, pkg, names, *, 
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps({"values": vals}, indent=2) + "\n", encoding="utf-8")
     if pack.icon_img is not None:
-        from PIL import Image
-        Image.fromarray(pack.icon_img).save(res / "assets" / modid / "icon.png")
+        from .png import save_png
+        save_png(res / "assets" / modid / "icon.png", pack.icon_img)
     desc = description or f"Blocs créés avec pixvox : {', '.join(names)}"
     jdir = root / "src" / "main" / "java" / Path(*pkg.split("."))
     for rel, txt in _java_files(ctx).items():

@@ -39,6 +39,7 @@ l'onglet *Summary* de chaque job, ou les fichiers `*.json` des artefacts (contra
 | `pixvox/render.py`, `mcmodel.py` | rendu « comme le jeu » et lecteur de modèles JSON Minecraft (référence de toute vérification) |
 | `pixvox/anim.py`, `assets.py` | animation (Timing, fire, pulse, flow) ; Block, Model, MultiBlock, Item, Props |
 | `pixvox/export.py` | resource pack : optimisation en éléments, atlas, `.mcmeta`, vérification par re-rendu |
+| `pixvox/png.py` | encodeur PNG déterministe (mêmes pixels → mêmes octets partout) pour tout PNG livré |
 | `pixvox/analyze.py`, `review.py` | analyse (raccords, palette, boucles…) et planches de revue PNG / GIF |
 | `pixvox/mod.py`, `mod_templates/` | projet de mod Gradle (Java, données 26.3, test JUnit) |
 | `pixvox/cli.py`, `summary.py`, `templates/` | ligne de commande, résumés Markdown, gabarits de `pixvox new` |

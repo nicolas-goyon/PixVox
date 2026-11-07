@@ -295,7 +295,13 @@ class Sprite:
         return img
 
     def save(self, path, scale: int = 1) -> None:
-        self.to_image(scale).save(path)
+        """Écrit l'image : PNG identique octet pour octet sur toutes les machines (`pixvox.png`) quand le
+        nom finit par .png, sinon au format que Pillow déduit de l'extension."""
+        if str(path).lower().endswith(".png"):
+            from .png import save_png
+            save_png(path, self.to_image(scale))
+        else:
+            self.to_image(scale).save(path)
 
     def to_ascii(self, legend: dict | None = None) -> str:
         """Grille texte + légende (pour relire les pixels exacts)."""

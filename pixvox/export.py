@@ -38,12 +38,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
-from PIL import Image
 
 from ._io import MARKER, mark_output_dir, prepare_output_dir, say
 from .anim import Anim, preview_ticks
 from .assets import Block, Item, Model, MultiBlock, Multipart, Plane
 from .mcmodel import ModelLoader
+from .png import save_png
 from .render import BACK, INVENTORY, compare, fit_camera, quads_from_volume, render, rot_matrix
 from .volume import FACES, NORMALS, face_coords
 
@@ -735,7 +735,7 @@ class ResourcePack:
         path.write_text(dumps(obj) + "\n", encoding="utf-8")
 
     def _png(self, path: Path, arr: np.ndarray) -> None:
-        Image.fromarray(np.asarray(arr, np.uint8), "RGBA").save(path)
+        save_png(path, np.asarray(arr, np.uint8))
 
     def _block_texture(self, name: str, suffix: str, tex, timing=None) -> str:
         """Texture de bloc du modèle `name`, rangée selon self.layout."""
@@ -767,7 +767,7 @@ class ResourcePack:
         self.root.mkdir(parents=True, exist_ok=True)
         self._json(self.root / "pack.mcmeta", pack_meta(self.description, (self.min_format, self.max_format)))
         if self.icon_img is not None:
-            Image.fromarray(self.icon_img).save(self.root / "pack.png")
+            save_png(self.root / "pack.png", self.icon_img)
 
     def _write_model(self, path: Path, model: dict) -> None:
         """Modèle de bloc, dans les champs que lit la version visée (relu tel quel par la vérification)."""

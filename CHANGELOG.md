@@ -22,8 +22,6 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; ve
   rotation de `facing` sur chaque partie, modèle vide (`Part.empty`), modèle d'objet choisi avec `display`.
   La vérification relit le blockstate (jusqu'à 16 ensembles de parties, le plus grand dans chaque
   direction) ; la planche les montre. Nouveau `kind` JSON : `multipart`. `pixvox mod` refuse ce type d'asset (code 1).
-  La vérification relit le blockstate pour chaque ensemble de parties et chaque direction ; la planche les
-  montre. Nouveau `kind` JSON : `multipart`. `pixvox mod` refuse ce type d'asset (code 1).
 - Mods NeoForge pour Minecraft 1.21.1 : `pixvox mod … --loader neoforge --mc 1.21.1`, `export_mod(…, mc="1.21.1")`
   (#20). NeoForge 21.1, JDK 21, ressources et tables de butin au format 1.21.1, mêmes fonctions qu'en 26.3.
   Le résultat JSON indique `mc` ; `pixvox doctor` dit dans `mod_build.targets` quel JDK chaque cible exige.
@@ -38,6 +36,11 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; ve
   (`Volume.m_visible`), une boîte ne réunit plus les deux opacités, une face translucide ne montre plus sa
   partie cachée, et le rendu mélange les faces translucides pixel par pixel : l'image ne dépend plus du
   découpage en quads. Les fichiers d'un volume opaque ne changent pas.
+- Les PNG livrés (textures, `pack.png`, icône du mod, `Anim.save`, `Sprite.save` en `.png`) sont identiques
+  octet pour octet sur toutes les machines (#41). pixvox les encode lui-même (`pixvox.png`, numpy seul) au
+  lieu de passer par le zlib de la machine, qui changeait les octets à pixels identiques (zlib-ng, par
+  exemple). Taille comparable. **Tous les PNG exportés changent une fois** : un projet qui versionne ses
+  textures pixvox doit les régénérer en passant à cette version. Les planches de revue ne changent pas.
 
 ### Modifié
 
