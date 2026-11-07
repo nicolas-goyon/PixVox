@@ -116,6 +116,7 @@ ratée), `2` erreur d'utilisation ou d'environnement, `3` erreur interne.
 |---|---|
 | `pixvox new NOM --kind …` | fichier d'asset de départ |
 | `pixvox review F.py` | planche PNG + rapport (+ planche d'animation et GIF) |
+| `pixvox watch F.py [--html] [--view 135,20]` | planche refaite à chaque sauvegarde (et à chaque modification d'un module importé) |
 | `pixvox vanilla [--mc 26.3\|1.21.1]` | met en cache local les textures de blocs du jeu (une fois, avec réseau) : planche « dans le monde », écarts aux matériaux vanilla, `ramp_from_vanilla` |
 | `pixvox export F.py… --pack D --zip Z [--mc 1.21.1]` | resource pack vérifié (+ datapack de placement des multiblocs) ; `--mc 1.21.1` pour NeoForge 1.21.1 |
 | `pixvox mod F.py… --modid ID [--loader neoforge] --build` | projet de mod + `.jar` |

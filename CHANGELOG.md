@@ -5,6 +5,14 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; ve
 
 ## [Non publié]
 
+### Ajouté
+
+- `pixvox watch F.py` (#25) : revue refaite à chaque sauvegarde du fichier et des modules locaux qu'il importe
+  (relevé des dates de modification, sans dépendance ; les modules sont rechargés, une palette changée dans
+  un import se voit). La planche est réécrite au même chemin ; une erreur est affichée sans arrêter la
+  surveillance. `--view YAW,PITCH` / `--shading` ajoutent une vue libre, `--html` sert une page locale qui se
+  recharge seule, `--json-lines` écrit un résultat JSON par passage, `--passes N` s'arrête après N passages.
+
 ## [0.3.0]
 
 ### Ajouté
