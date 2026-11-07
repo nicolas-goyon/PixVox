@@ -87,6 +87,7 @@ ou environnement / 3 interne (contrat : `docs/cli.md`). `python -m pixvox summar
 | forme libre (champignon, brasero, lanterne) | `Model(name, volume)` → éléments + atlas (limite [-16, 32]) |
 | objet de plusieurs blocs (statue, arbre, machine) | `MultiBlock(name, volume)` : sans limite de taille |
 | bloc dont les parties dépendent de ses propriétés | `Multipart(name, parts, properties, facing=True, item=…)` : blockstate `multipart` (export seulement, pas `pixvox mod`) |
+| dalle, escalier, mur, barrière, portillon, bouton, plaque d'un matériau | `bloc.variants("slab", "stairs", …)` (toutes si rien) : textures du bloc plein projetées, mêmes raccords |
 | même objet à plusieurs tailles / finesses | décrire en unités de conception : `Volume.design(extent, res=, scale=)` |
 | animation (feu, lave, braises, runes) | liste de volumes (`v.frames(n)` + `pulse` / `flow`), `fire()` + `add_cross` |
 | partie qui brille la nuit | `emissive=masque, emission=12` sur Block / Model / MultiBlock ; plans `emission=15` |
@@ -233,6 +234,8 @@ Multipart("tableau", [Part(base, {"column": 1}),                  # une valeur, 
                      Part.empty("tableau_vide", base, {"OR": [{"column": [0, 2]}, {"row": [0, 2]}]})],
           {"column": range(3), "row": range(3), "papers": range(8)},
           facing=True, item=complet, item_display={...})         # item : modèle de l'objet en main
+bloc.variants(*shapes, names={"wall": "…"})   # [Variant] ; shapes parmi SHAPES : slab, stairs, wall, fence,
+                                              # fence_gate, button, pressure_plate ; noms <bloc>_<variante>
 export_pack([...], root="out/pack", namespace="pixvox", zip_path=None, replace={"nom": "minecraft:stone"},
             textures="flat")   # ou "folders" : textures/block/<modèle>/atlas.png ; verified(info) : export fidèle
 export_mod([...], out, modid, name=None, *, loader="fabric", build=False, java_home=None, zip_path=None)
@@ -246,6 +249,12 @@ perlin(shape, cells=4, seed=0, octaves=1)   # shape 2D, 3D… ou 4D (x, y, z, te
 - **Caisse / machine** (`reinforced_crate.py`) : panneaux `paint_face(f, sp, at=(2,2))`, cadre éclairé en
   3D, `seamless=False`.
 - **Herbe / mousse** (`mossy_stone.py`) : `cap(MOSS, depth=(1,4))` + `seamless="horizontal"`.
+- **Famille de construction** : `pierre.variants()` sur un bloc qui se raccorde (`seamless=True` ou
+  `"horizontal"`). Chaque élément montre la peau du bloc plein à cet endroit, dans la direction où il
+  regarde : la dalle du bas montre le bas des côtés, la marche le haut (coulures de mousse comprises), et un
+  escalier tourné vers l'est montre la face « est » du volume. Un bloc encadré (`seamless=False`) se décline
+  mal (le cadre est coupé : alerte de l'analyse). La planche montre l'objet, une scène sur le bloc plein et
+  les états caractéristiques ; l'export relit chaque état du blockstate (40 pour l'escalier).
 - **Bûche** (`ashen_log.py`) : cernes + écorce `noise(cells=(6,1,6))`, `states="axis"`.
 - **Modèle organique** (`glowcap.py`) : ellipsoïdes, `shade(noise=0.1–0.2)`.
 - **Item** (`lumenite_shard.py`) : ASCII, contour très sombre teinté, lumière haut-gauche.

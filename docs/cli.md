@@ -71,7 +71,7 @@ Champs communs :
   dossier vide ou qu'il a lui-même créé (fichier `.pixvox`), sinon erreur `output_dir` (code 2) : `--pack .`
   ne peut pas effacer votre dossier de travail.
 - Les chemins sont écrits avec des `/`, relatifs au dossier courant si on les a donnés ainsi.
-- `kind` d'un asset : `block`, `model`, `multiblock`, `multipart` ou `item` (identifiants stables, en anglais).
+- `kind` d'un asset : `block`, `model`, `multiblock`, `multipart`, `variant` ou `item` (identifiants stables, en anglais).
 
 ### `export`
 
@@ -109,6 +109,11 @@ textures d'items restent dans `textures/item/`.
 
 Un asset `multipart` : `details.parts`, `details.models` (fichiers de modèles écrits), `details.states` (états
 du blockstate relus et comparés : jusqu'à 16 ensembles de parties, le plus grand dans chaque direction).
+
+Une variante de construction (`variant`) : `details.shape` (`slab`, `stairs`, `wall`, `fence`, `fence_gate`,
+`button`, `pressure_plate`), `details.base` (bloc plein dont elle reprend les textures), `details.models`
+(modèles écrits, un par géométrie), `details.states` (états du blockstate relus et comparés : tous, sauf
+pour le mur, 17 configurations), `details.elements`, `details.render_type`. `model` est le modèle de l'objet.
 
 ### `review`
 

@@ -22,6 +22,8 @@ def _details(e: dict) -> str:
     if e.get("kind") == "multiblock" and d.get("blocks"):
         b = d["blocks"]
         parts.append(f"{b[0]}×{b[1]}×{b[2]} blocs, {d.get('parts')} parties")
+    if e.get("kind") == "variant" and d.get("shape"):
+        parts.append(f"{d['shape']} de `{d.get('base')}`, {d.get('models')} modèles, {d.get('states')} états vérifiés")
     if d.get("elements") is not None and e.get("kind") != "block":
         parts.append(f"{d['elements']} éléments")
     if d.get("texture_size"):

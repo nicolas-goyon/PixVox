@@ -5,6 +5,22 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; ve
 
 ## [Non publié]
 
+### Ajouté
+
+- Variantes de construction (#22) : `bloc.variants("slab", "stairs", "wall", "fence", "fence_gate", "button",
+  "pressure_plate")` (toutes si rien n'est donné), classe `Variant`, liste `SHAPES`. Géométries et propriétés
+  des blocs vanilla (escalier : `facing`, `half`, `shape` ; mur : côtés `none`/`low`/`tall` et `up`…). Les
+  textures sont celles du bloc plein, projetées : chaque élément montre ce que le bloc plein montre à cet
+  endroit, dans la direction où il regarde. Les modèles sont donc écrits déjà orientés (un par géométrie,
+  sans rotation de blockstate ni `uvlock`) : la bonne face du volume dans chaque orientation, même quand ses
+  six faces diffèrent. Blockstates à variantes, multipart pour le mur et la barrière ; objets sur les modèles
+  d'inventaire. Les deux cibles (`1.21.4+`, `1.21.1`). La vérification relit chaque état du blockstate (17
+  configurations pour le mur) en plus de l'objet ; un test compare la géométrie de l'escalier et du bouton
+  aux blockstates vanilla. Planche : objet, scène posée sur le bloc plein, états caractéristiques. Nouveau
+  `kind` JSON : `variant` (`details.shape`, `base`, `models`, `states`). `--replace` et `pixvox mod`
+  refusent les variantes (code 1) ; un bloc à surcouche lumineuse ne se décline pas.
+- `ModelLoader.blockstate_quads` lit aussi les blockstates à variantes.
+
 ## [0.2.0]
 
 ### Ajouté

@@ -411,6 +411,32 @@ def plane_quads(center, y: float, width: float, height: float, angle: float, tex
     return out
 
 
+def projected_box_quads(boxes, face_textures: dict) -> list:
+    """Faces des boîtes [lo, hi] (unités modèle) texturées par projection des 6 textures d'un bloc plein :
+    chaque face montre ce que le bloc plein montre à cet endroit dans sa direction (variantes de
+    construction). Toutes les faces sont rendues, même cachées : c'est la référence de la vérification."""
+    out = []
+    for lo, hi in boxes:
+        lo, hi = np.asarray(lo, float), np.asarray(hi, float)
+        for f, t in face_textures.items():
+            tex = np.asarray(t.data if hasattr(t, "data") else t)
+            lax = AXIS[FACE_AXES[f][0]]
+            others = [k for k in range(3) if k != lax]
+            if any(hi[k] <= lo[k] for k in others):
+                continue
+            full = face_quad(f, np.zeros(3), np.full(3, 16.0), tex)
+            q = face_quad(f, lo, hi, tex, tag=f)
+            th, tw = tex.shape[:2]
+
+            def uv(p, full=full, tw=tw, th=th):
+                d = p - full.p0
+                return (float(d @ full.e1) / float(full.e1 @ full.e1) * tw,
+                        float(d @ full.e2) / float(full.e2 @ full.e2) * th)
+            out.append(Quad(q.p0, q.e1, q.e2, uv(q.p0), uv(q.p0 + q.e1), uv(q.p0 + q.e2), tex,
+                            q.normal, f, True, tag=f))
+    return out
+
+
 def cube_quads(face_textures: dict, offset=(0, 0, 0), size: float = 16.0, skip=()) -> list:
     """Les 6 faces d'un bloc plein à partir de ses textures (orientation Minecraft)."""
     off = np.asarray(offset, float)
