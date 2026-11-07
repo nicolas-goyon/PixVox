@@ -33,6 +33,7 @@ import numpy as np
 from ._io import MARKER, mark_output_dir, prepare_output_dir, say
 from .assets import PARTICLES, Block, Item, Model, MultiBlock, Multipart, Props
 from .export import ExportError, ResourcePack, dumps, greedy_boxes
+from .variants import Variant
 
 TEMPLATES = Path(__file__).parent / "mod_templates"
 FABRIC = {"minecraft": "26.3", "loader": "0.19.5", "loom": "1.18-SNAPSHOT", "fabric_api": "0.163.0+26.3",
@@ -1234,6 +1235,9 @@ def _write_project(assets, root: Path, final: Path, modid, name, pkg, names, *, 
         if isinstance(a, Multipart):
             raise ExportError(f"{a.name} : pixvox mod ne génère pas encore de Multipart ; l'exporter avec pixvox export "
                               "et enregistrer le bloc et ses propriétés dans le mod")
+        if isinstance(a, Variant):
+            raise ExportError(f"{a.name} : pixvox mod ne génère pas encore de variantes de construction ({a.shape}) ; "
+                              "l'exporter avec pixvox export")
         if mc == "1.21.1":
             _check_props_1_21_1(a)
         infos.append(pack.add(a))           # ExportError si un modèle est invalide pour le jeu : pas de mod bancal

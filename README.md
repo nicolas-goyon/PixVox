@@ -34,6 +34,9 @@ construction.
   64 voxels par bloc, ou à une autre taille (la statue devient une figurine d'un bloc).
 - **Animations** : textures animées (`.png.mcmeta`), braises qui palpitent, lave qui coule, flammes
   pixel-art générées, parties lumineuses (`light_emission`) visibles la nuit.
+- **Variantes de construction** : `bloc.variants("slab", "stairs", "wall", …)` décline un bloc plein en
+  dalle, escalier, mur, barrière, portillon, bouton et plaque de pression, avec ses textures (mêmes
+  raccords) ; modèles et blockstates au format vanilla, chaque état relu et vérifié.
 - **Planches de revue** : inventaire, dessous en perspective, monde 3×3×3, nuit, taille réelle, patron
   des textures, analyse (raccords, palette, boucle d'animation…), GIF.
 - **Export vérifié** : chaque modèle et chaque texture écrits sur disque sont relus et rendus comme le
@@ -134,7 +137,10 @@ ratée), `2` erreur d'utilisation ou d'environnement, `3` erreur interne.
   Minecraft 26.3 (Fabric, NeoForge) ou 1.21.1 (NeoForge, `--mc 1.21.1`, JDK 21) ; versions dans `pixvox/mod.py`.
 - Seules les textures s'animent (limite du jeu) ; pas de tintes de biome ni de textures connectées.
 - `Multipart` (parties affichées selon les propriétés du bloc) s'exporte en resource pack ; `pixvox mod` ne le
-  génère pas, le bloc s'enregistre dans le mod qui le possède.
+  génère pas, le bloc s'enregistre dans le mod qui le possède. Les variantes de construction (`Block.variants`)
+  non plus pour l'instant.
+- Variantes : pas de `--replace` (les blocs vanilla visés ont des propriétés) ; un bloc à surcouche lumineuse
+  (`emissive`) ne se décline pas.
 - Faces translucides : pixvox les mélange pixel par pixel, le jeu les trie quad par quad. Là où deux faces
   translucides se croisent, l'image en jeu peut différer de la planche ; la vérification ne compare pas ce tri.
   Un `Block` n'a que sa peau : un cœur opaque dans un cube de verre ne s'exporte pas (utiliser `Model`).

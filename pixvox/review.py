@@ -505,6 +505,32 @@ def _sheet_multipart(mp, findings) -> Image.Image:
     return _analysis_panel(cv, 16, y2, W - 32, findings)
 
 
+def _sheet_variant(v, findings) -> Image.Image:
+    """Objet, scène « posée dans le monde » sur le bloc plein, puis une case par état caractéristique."""
+    from .variants import LABELS
+    states = v.showcase_states()
+    P, cols = 260, 5
+    rows = (len(states) + cols - 1) // cols
+    top = 50 + 360 + 52
+    W, y2 = 16 + cols * (P + 26), top + rows * (P + 52)
+    cv = Image.new("RGBA", (W, y2 + 420), BG)
+    _header(cv, v.name, f"{LABELS[v.shape]} de {v.base.name} · {len(v.models())} modèles · "
+                        f"{len(v.all_states())} états · textures du bloc plein, projetées")
+    q = v.quads(0)
+    frame = cube_quads(v.faces_at(0))                         # cadrage d'un bloc entier : taille réelle comparable
+    box = _panel(cv, 16, 50, 370, 396, "Inventaire (cadre : un bloc)")
+    _paste_center(cv, _img(render(q, fit_camera(frame, INVENTORY, 360, 360, 0.06), shading="gui")), box)
+    sq = v.scene_quads(0)
+    box = _panel(cv, 16 + 396, 50, W - 16 - 396 - 16, 396, "Dans le monde, sur le bloc plein (ombrage en jeu)")
+    _paste_center(cv, _img(render(sq, fit_camera(sq, INVENTORY, box[2] - 20, 360, 0.04), shading="world")), box)
+    for i, (label, state) in enumerate(states):
+        box = _panel(cv, 16 + (i % cols) * (P + 26), top + (i // cols) * (P + 52), P + 10, P + 36, label[:40])
+        qs = v.state_quads(state)
+        cam = fit_camera(frame, INVENTORY, P, P, 0.05)                           # même cadrage : un bloc entier
+        _paste_center(cv, _img(render(qs, cam, shading="gui")), box)
+    return _analysis_panel(cv, 16, y2, W - 32, findings)
+
+
 def review_data(asset, out_dir="out") -> dict:
     """Planche de revue PNG + rapport texte (+ planche d'animation et GIF), sans rien afficher.
 
@@ -513,7 +539,10 @@ def review_data(asset, out_dir="out") -> dict:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     findings = analyze(asset)
-    if isinstance(asset, Multipart):
+    from .variants import Variant
+    if isinstance(asset, Variant):
+        sheet = _sheet_variant(asset, findings)
+    elif isinstance(asset, Multipart):
         sheet = _sheet_multipart(asset, findings)
     elif isinstance(asset, MultiBlock):
         sheet = _sheet_multi(asset, findings)

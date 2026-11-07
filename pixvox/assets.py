@@ -278,6 +278,13 @@ class Block(Asset, _Animated):
             out[f] = fr[0] if same else Anim(fr, self.timing.frametime, self.timing.interpolate, self.timing.order)
         return out
 
+    def variants(self, *shapes: str, names: dict | None = None) -> list:
+        """Variantes de construction tirées de ce bloc : "slab", "stairs", "wall", "fence", "fence_gate",
+        "button", "pressure_plate" (toutes si aucune n'est donnée). Mêmes textures, lues sur la peau du
+        volume ; noms <bloc>_<variante> sauf `names={"slab": "…"}`. Voir pixvox.variants."""
+        from .variants import SHAPES, Variant
+        return [Variant(self, s, (names or {}).get(s)) for s in (shapes or SHAPES)]
+
     def effective_render_type(self) -> str:
         if self.render_type:
             return self.render_type

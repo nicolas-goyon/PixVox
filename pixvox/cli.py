@@ -68,10 +68,11 @@ class _Parser(argparse.ArgumentParser):
 
 # ============================================================================ outils
 def asset_kind(asset) -> str:
-    """'block' | 'model' | 'multiblock' | 'multipart' | 'item' (identifiants stables, pour les logiciels)."""
+    """'block' | 'model' | 'multiblock' | 'multipart' | 'variant' | 'item' (identifiants stables, pour les logiciels)."""
     from .assets import Block, Item, Model, MultiBlock, Multipart
-    for cls, name in ((MultiBlock, "multiblock"), (Multipart, "multipart"), (Block, "block"), (Model, "model"),
-                      (Item, "item")):
+    from .variants import Variant
+    for cls, name in ((MultiBlock, "multiblock"), (Multipart, "multipart"), (Variant, "variant"), (Block, "block"),
+                      (Model, "model"), (Item, "item")):
         if isinstance(asset, cls):
             return name
     return type(asset).__name__.lower()
@@ -122,7 +123,7 @@ def load_assets(path: str) -> list:
             sys.path.pop(0)
     bad = [type(a).__name__ for a in out if not isinstance(a, Asset)]
     if bad:
-        raise CliError(f"{path} : build() doit renvoyer des Block / Model / MultiBlock / Item "
+        raise CliError(f"{path} : build() doit renvoyer des Block / Model / MultiBlock / Multipart / Variant / Item "
                        f"(reçu : {', '.join(bad)})", file=path)
     if not out:
         raise CliError(f"{path} : aucun asset (définir build() qui renvoie un asset ou une liste d'assets)", file=path)

@@ -11,6 +11,11 @@ Disposition produite (namespace `pixvox` par défaut) :
 Multipart : un modèle par partie (sans blockstate ni objet à leur nom), blockstates/<nom>.json en
 multipart, et l'objet <nom> sur le modèle choisi (models/item/<nom>.json s'il a un champ display).
 
+Variante de construction (Variant : dalle, escalier, mur…) : les textures du bloc plein (mêmes fichiers),
+un modèle par géométrie déjà orientée (<nom>, <nom>_top, <nom>_north_bottom_outer_left, <nom>_post…, UV
+= projection, sans rotation de blockstate ni uvlock), blockstates/<nom>.json à variantes (multipart pour
+le mur et la barrière), et l'objet sur le modèle d'inventaire.
+
 Rangement textures="folders" : un dossier par modèle, assets/<ns>/textures/block/<nom>/atlas.png (texture
 principale), glow.png, anim.png, p0.png, top.png… Les références des modèles et la vérification suivent.
 
@@ -42,9 +47,10 @@ import numpy as np
 from ._io import MARKER, mark_output_dir, prepare_output_dir, say
 from .anim import Anim, preview_ticks
 from .assets import Block, Item, Model, MultiBlock, Multipart, Plane
-from .mcmodel import ModelLoader
+from .mcmodel import ModelLoader, auto_uv
 from .png import save_png
 from .render import BACK, INVENTORY, compare, fit_camera, quads_from_volume, render, rot_matrix
+from .variants import Variant
 from .volume import FACES, NORMALS, face_coords
 
 
@@ -690,6 +696,33 @@ def cube_model_json(ns: str, name: str, face_to_suffix: dict, glow_to_suffix: di
     return {"parent": "minecraft:block/block", "textures": tex, "elements": elements}
 
 
+_BOUNDARY = {"down": (1, 0, 0.0), "up": (1, 1, 16.0), "north": (2, 0, 0.0), "south": (2, 1, 16.0),
+             "west": (0, 0, 0.0), "east": (0, 1, 16.0)}
+
+
+def variant_model_json(boxes: list, textures: dict, render_type: str = "solid") -> dict:
+    """Modèle d'une variante de construction : un élément par boîte, ses 6 faces (comme les modèles vanilla,
+    faces internes comprises), UV = projection (UV par défaut de Minecraft, écrits explicitement), cullface
+    sur les faces posées contre le bord du bloc. `textures` : {face: identifiant} du bloc plein."""
+    elements = []
+    for lo, hi in boxes:
+        faces = {}
+        for f in FACES:
+            ax, side, plane = _BOUNDARY[f]
+            if any(hi[k] <= lo[k] for k in range(3) if k != ax):
+                continue
+            fd = {"uv": [_num(u) for u in auto_uv(f, lo, hi)], "texture": "#" + f}
+            if (hi if side else lo)[ax] == plane:
+                fd["cullface"] = f
+            faces[f] = fd
+        if faces:
+            elements.append({"from": [_num(x) for x in lo], "to": [_num(x) for x in hi], "faces": faces})
+    model = {"parent": "minecraft:block/block", "textures": dict(textures), "elements": elements}
+    if render_type != "solid":
+        model["render_type"] = f"minecraft:{render_type}"     # NeoForge ≤ 1.21.x ; en 26.x déduit des textures
+    return model
+
+
 # ============================================================================ resource pack
 def dumps(obj) -> str:
     """JSON indenté, mais listes de nombres sur une ligne ([0, 0, 16, 16]) : lisible et compact."""
@@ -848,6 +881,8 @@ class ResourcePack:
             info = self._add_model(asset)
         elif isinstance(asset, Multipart):
             info = self._add_multipart(asset)
+        elif isinstance(asset, Variant):
+            info = self._add_variant(asset)
         elif isinstance(asset, Item):
             info = self._add_item(asset)
         else:
@@ -964,6 +999,48 @@ class ResourcePack:
         return {"name": mp.name, "kind": "multipart", "model": item, "parts": len(mp.parts), "models": len(models),
                 "elements": sum(i["elements"] for i in parts), "states": len(states),
                 "verify": diff, "warnings": warnings, "animated": sum(i["animated"] for i in parts)}
+
+    def _add_variant(self, v: Variant) -> dict:
+        """Variante de construction : textures du bloc plein (mêmes fichiers que lui), un modèle par
+        géométrie déjà orientée, blockstate à variantes (multipart pour le mur et la barrière), objet ; puis
+        chaque état utile relu du disque et comparé à la projection de la peau du bloc plein."""
+        b = v.base
+        f2s, textures = cube_textures(b)
+        for suf, t in textures.items():
+            self._block_texture(b.name, suf, t)
+        tex = {f: f"{self.ns}:block/{texture_name(b.name, f2s[f], self.layout)}" for f in FACES}
+        tex["particle"] = tex["north"]
+        rt = b.effective_render_type()
+        n_el = 0
+        for name, boxes in v.models():
+            model = variant_model_json(boxes, tex, rt)
+            n_el += len(model["elements"])
+            self._write_model(self._p(self.ns, "models", "block", f"{name}.json"), model)
+
+        def ref(boxes):
+            return f"{self.ns}:block/{v.model_name(boxes)}"
+        if v.multipart:
+            bs = {"multipart": [{"apply": {"model": ref(boxes)}, **({"when": dict(when)} if when else {})}
+                                for _, when, boxes in v.parts()]}
+        else:
+            bs = {"variants": {v.state_key(s): {"model": ref(v.boxes(s))} for s in v.all_states()}}
+        self._json(self._p(self.ns, "blockstates", f"{v.name}.json"), bs)
+        item = ref(v.inventory_boxes())
+        self._item(self.ns, v.name, item)
+
+        loader = ModelLoader([self.root], mc=self.target.mc)
+        diff = self._verify_ticks(item, v, v.quads)
+        states = v.check_states()
+        for state in states:
+            d = self.verify(None, v.state_quads(state), views=(INVENTORY, BACK, (135, 25)),
+                            quads=loader.blockstate_quads(f"{self.ns}:{v.name}", state))
+            diff["diff_px"] += d["diff_px"]
+            diff["views"] += d["views"]
+        diff["missing"] = sorted(set(diff["missing"]) | set(loader.missing))
+        n_anim = sum(isinstance(t, Anim) for t in textures.values())
+        return {"name": v.name, "kind": "variante", "model": item, "shape": v.shape, "base": b.name,
+                "models": len(v.models()), "states": len(states), "elements": n_el, "render_type": rt,
+                "verify": diff, "warnings": [], "animated": n_anim}
 
     def _add_model(self, m: Model, block: bool = True) -> dict:
         opt = optimize_model(m)
@@ -1132,6 +1209,9 @@ class ResourcePack:
         pour tester tout de suite en jeu."""
         if isinstance(asset, Multipart):
             raise ExportError(f"{asset.name} : --replace ne s'applique pas à un Multipart (blockstate à propriétés)")
+        if isinstance(asset, Variant):
+            raise ExportError(f"{asset.name} : --replace ne s'applique pas à une variante ({asset.shape} : bloc vanilla "
+                              "à propriétés) ; l'exporter pour un mod (pixvox mod) ou la tester avec custom_model_data")
         if isinstance(asset, MultiBlock):
             raise ExportError(f"{asset.name} : --replace ne s'applique pas à un MultiBlock (plusieurs blocs) ; "
                               "utiliser le datapack de placement, ou un mod (python -m pixvox mod …)")
@@ -1296,6 +1376,8 @@ def export_line(info: dict) -> str:
                  f"(max {info['elements_max']}/partie), atlas {info['texture_size']}px")
     elif info["kind"] == "multipart":
         extra = f", {info['parts']} parties, {info['models']} modèles, {info['states']} états vérifiés"
+    elif info["kind"] == "variante":
+        extra = f", {info['shape']} de {info['base']}, {info['models']} modèles, {info['states']} états vérifiés"
     elif info["kind"] == "bloc":
         extra = f", textures : {info['layout']}"
     if info.get("animated"):

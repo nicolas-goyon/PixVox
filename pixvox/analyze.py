@@ -531,7 +531,31 @@ def analyze_multipart(mp) -> list:
     return out
 
 
+def analyze_variant(v) -> list:
+    """Variante de construction : ce qu'elle reprend du bloc plein, et ce qui risque de mal se raccorder."""
+    from .variants import LABELS
+    b = v.base
+    out = [Finding("INFO", "Variante", f"{LABELS[v.shape]} de {b.name} : {len(v.models())} modèles, "
+                   f"{len(v.all_states())} états (blockstate {'multipart' if v.multipart else 'à variantes'})"),
+           Finding("OK", "Textures", f"celles de {b.name}, projetées sur chaque élément : mêmes raccords que le "
+                   "bloc plein, dans chaque orientation")]
+    if b.seamless is False:
+        out.append(Finding("WARN", "Textures", f"{b.name} est un bloc encadré (seamless=False) : la projection coupe "
+                           "le cadre (une dalle n'en montre que la moitié) ; préférer un matériau qui se raccorde"))
+    faces = b.faces()
+    sides = [faces[f].data for f in ("north", "east", "south", "west")]
+    if any(not np.array_equal(s, sides[0]) for s in sides[1:]):
+        out.append(Finding("INFO", "Orientation", "côtés différents : chaque élément montre la face du bloc tournée "
+                           "du même côté (modèles écrits orientés, sans uvlock)"))
+    if b.props is None:
+        out.append(Finding("INFO", "Mod", f"pas de Props sur {b.name} : comportement par défaut dans un mod"))
+    return out
+
+
 def analyze(asset) -> list:
+    from .variants import Variant
+    if isinstance(asset, Variant):
+        return analyze_variant(asset)
     if isinstance(asset, Multipart):
         return analyze_multipart(asset)
     if isinstance(asset, MultiBlock):
@@ -547,7 +571,7 @@ def analyze(asset) -> list:
 
 def format_report(asset, findings: list, extra: list | None = None) -> str:
     kind = {"cube": "bloc plein 16³", "model": "modèle voxel", "sprite": "item plat",
-            "multi": "objet multibloc", "multipart": "bloc multipart"}[asset.kind]
+            "multi": "objet multibloc", "multipart": "bloc multipart", "variant": "variante de construction"}[asset.kind]
     head = f"=== {asset.name} ({kind}) ==="
     lines = [head] + [f.line() for f in findings]
     if extra:

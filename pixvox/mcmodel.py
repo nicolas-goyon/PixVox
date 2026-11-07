@@ -248,20 +248,40 @@ class ModelLoader:
         return out
 
     def blockstate_quads(self, ref: str, state: dict) -> list:
-        """Quads d'un blockstate multipart dans l'état `state`, relu du disque comme le jeu : chaque partie
-        dont la condition est vraie, avec sa rotation y."""
+        """Quads du blockstate `ref` dans l'état `state`, relu du disque comme le jeu : la variante qui
+        convient (blockstate à variantes), ou chaque partie dont la condition est vraie (multipart),
+        avec sa rotation y."""
         path = self._find("blockstates", ref, ".json")
         if path is None:
             self.missing.append(norm_id(ref))
             return []
+        bs = json.loads(path.read_text(encoding="utf-8"))
+        if "variants" in bs:
+            return self._variant_quads(bs["variants"], state)
         out = []
-        for case in json.loads(path.read_text(encoding="utf-8"))["multipart"]:
+        for case in bs["multipart"]:
             if when_matches(case.get("when"), state):
                 apply = case["apply"][0] if isinstance(case["apply"], list) else case["apply"]
                 if apply.get("x"):
                     raise ValueError("rotation x d'une partie multipart : non gérée par la vérification")
                 out += rotate_quads_y(self.quads(apply["model"]), apply.get("y", 0))
         return out
+
+    def _variant_quads(self, variants: dict, state: dict) -> list:
+        """Blockstate à variantes, lu comme le jeu : la variante dont toutes les propriétés de la clé
+        ("a=1,b=2", ordre libre, "" = toutes) valent celles de l'état ; une seule doit convenir."""
+        found = []
+        for key, apply in variants.items():
+            pairs = [kv.split("=", 1) for kv in key.split(",") if kv]
+            if all(str(state.get(k)) == v for k, v in pairs):
+                found.append((key, apply))
+        if len(found) != 1:
+            self.missing.append(f"blockstate {state} : {len(found)} variante(s) au lieu d'une")
+            return []
+        apply = found[0][1][0] if isinstance(found[0][1], list) else found[0][1]
+        if apply.get("x") or (apply.get("uvlock") and apply.get("y")):
+            raise ValueError("variante tournée en x ou avec uvlock : non gérée par la vérification")
+        return rotate_quads_y(self.quads(apply["model"]), apply.get("y", 0))
 
     def _tex_for(self, textures, key, layer: str | None = None):
         ref = self._deref(textures, key)
