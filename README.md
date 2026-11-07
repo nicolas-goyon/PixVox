@@ -37,6 +37,11 @@ construction.
 - **Variantes de construction** : `bloc.variants("slab", "stairs", "wall", …)` décline un bloc plein en
   dalle, escalier, mur, barrière, portillon, bouton et plaque de pression, avec ses textures (mêmes
   raccords) ; modèles et blockstates au format vanilla, chaque état relu et vérifié.
+- **Matériaux prêts à l'emploi** : `planks`, `bricks`, `cut_stone`, `ore`, `metal` (`pixvox.materials`) peignent
+  un bloc qui se raccorde sans couture ; `pixvox new mon_bloc --material bricks` part d'une recette.
+
+![Matériaux](docs/images/materiaux.png)
+
 - **Teinte de biome** : herbe, feuillages, eau (`tint="grass"`, masque `tinted` des voxels peints en gris) ;
   `tintindex` sur les faces entièrement teintées, surcouche teintée sur les faces mixtes (comme le liseré de
   l'herbe vanilla) ; planche dans trois biomes, vérification avec la couleur du biome.
@@ -134,6 +139,7 @@ ratée), `2` erreur d'utilisation ou d'environnement, `3` erreur interne.
 | `examples/mossy_stone.py` | avant / après : textures dessinées à part (conflits) vs mousse en voxels |
 | `examples/meadow_grass.py` | bloc d'herbe teinté par le biome : dessus `tintindex`, coulures en surcouche |
 | `examples/willow_leaves.py` | feuillage teinté avec trous creusés dans le volume (rendu cutout) |
+| `examples/materials.py` | planches, briques, pierre de taille, minerai, métal patiné (`pixvox.materials`) |
 | `examples/mossy_stone_family.py` | dalle, escalier, mur, barrière, portillon, bouton, plaque tirés du bloc plein |
 | `examples/ashen_log.py` | cernes + écorce, blockstate `axis` |
 | `examples/glowcap.py` | modèle voxel libre → éléments + atlas |

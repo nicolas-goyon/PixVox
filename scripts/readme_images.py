@@ -1,6 +1,8 @@
 """Régénère les images du README (docs/images/) à partir des exemples — rendu déterministe.
 
-    python scripts/readme_images.py
+    python scripts/readme_images.py                    # toutes
+    python scripts/readme_images.py --only materiaux   # catalogue des matériaux seulement
+    python scripts/readme_images.py --check            # le catalogue est-il à jour ? (CI)
 """
 from __future__ import annotations
 
@@ -15,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from pixvox.anim import save_gif  # noqa: E402
+from pixvox.png import save_png  # noqa: E402
 from pixvox.render import INVENTORY, cube_quads, fit_camera, render, tiled_cube_quads  # noqa: E402
 from pixvox.review import BG, GAME_VIEW, MUTED, PANEL, TEXT, _img, compare_sheet, font  # noqa: E402
 
@@ -75,9 +78,53 @@ def brazier_gif(size: int = 260) -> Path:
     return path
 
 
-def main() -> int:
+def materials_catalog(size: int = 300, path: Path | None = None) -> Path:
+    """Planche « catalogue » des matériaux de pixvox.materials : chaque exemple en mur de 3 × 3 × 3 blocs,
+    ombrage en jeu, nom et recette dessous. Vérifiée octet pour octet par la CI (rendu et PNG déterministes)."""
+    blocks = example("materials")
+    recipes = {"oak_boards": "planks(wood=\"oak\")", "red_bricks": "bricks()", "cut_stone_blocks": "cut_stone()",
+               "amber_ore": "ore(crystal=…)", "iron_plates": "metal()", "weathered_copper_plates": "metal(patina=0.45)"}
+    cols, pad = 3, 14
+    rows = (len(blocks) + cols - 1) // cols
+    W, H = cols * (size + pad) + pad, rows * (size + 52) + pad
+    cv = Image.new("RGBA", (W, H), BG)
+    d = ImageDraw.Draw(cv)
+    for i, b in enumerate(blocks):
+        x, y = pad + (i % cols) * (size + pad), pad + (i // cols) * (size + 52)
+        d.rounded_rectangle((x, y, x + size, y + size + 38), 8, fill=PANEL)
+        q = tiled_cube_quads(b.faces())
+        img = _img(render(q, fit_camera(q, INVENTORY, size - 16, size - 16, 0.04), shading="world"))
+        cv.alpha_composite(img, (x + 8, y + 8))
+        d.text((x + 10, y + size - 4), b.name, font=font(14), fill=TEXT)
+        d.text((x + 10, y + size + 14), recipes.get(b.name, ""), font=font(12, mono=True), fill=MUTED)
+    p = path or OUT / "materiaux.png"
+    save_png(p, cv)
+    return p
+
+
+def check_catalog() -> int:
+    """Code 1 si docs/images/materiaux.png n'est plus à jour (la CI le vérifie sous Linux : rendu et PNG
+    déterministes ; les polices des étiquettes diffèrent d'un système à l'autre)."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        fresh = materials_catalog(path=Path(d) / "materiaux.png").read_bytes()
+    current = (OUT / "materiaux.png").read_bytes() if (OUT / "materiaux.png").is_file() else b""
+    if fresh != current:
+        print("docs/images/materiaux.png n'est plus à jour : python scripts/readme_images.py --only materiaux")
+        return 1
+    print("docs/images/materiaux.png à jour")
+    return 0
+
+
+def main(argv=None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    if "--check" in argv:
+        return check_catalog()
     OUT.mkdir(parents=True, exist_ok=True)
-    made = [before_after(), brazier_gif(),
+    if argv[:1] == ["--only"] and argv[1:2] == ["materiaux"]:
+        print(materials_catalog().relative_to(ROOT))
+        return 0
+    made = [before_after(), brazier_gif(), materials_catalog(),
             compare_sheet(example("angel_statue"), OUT / "resolutions.png", 300)]
     gallery = [a for n in ("lumenite_ore", "reinforced_crate", "ashen_log", "glowcap", "magma_core") for a in example(n)]
     gallery += [example("mossy_stone")[2], example("lumenite_shard")[0]]

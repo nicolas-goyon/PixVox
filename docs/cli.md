@@ -16,7 +16,7 @@ python -m pixvox …        # équivalent, utile sans installation (depuis un cl
 
 | commande | rôle | sorties |
 |---|---|---|
-| `pixvox new NOM [--kind block\|model\|multiblock\|item\|animated] [--dir D]` | fichier d'asset de départ, prêt à modifier | `D/NOM.py` |
+| `pixvox new NOM [--kind block\|model\|multiblock\|item\|animated] [--material planks\|bricks\|cut_stone\|ore\|metal] [--dir D]` | fichier d'asset de départ, prêt à modifier (`--material` : bloc tiré d'une recette de `pixvox.materials`) | `D/NOM.py` |
 | `pixvox review F.py… [--out D] [--only NOM] [--fail-on never\|warn\|err] [--neighbors a,b]` | planche de revue + rapport (+ planche d'animation et GIF) | `D/<nom>.review.png`, `.report.txt`, `.anim.png`, `.anim.gif` |
 | `pixvox export F.py… [--pack D] [--ns NS] [--zip Z] [--replace nom=minecraft:bloc] [--mc 1.21.4+\|1.21.1] [--textures flat\|folders]` | resource pack Java vérifié par re-rendu, pour 1.21.4 → 26.3 (défaut) ou 1.21.1 (NeoForge 21.1) | `D/` (+ `Z`, `D_datapack/` pour les multiblocs) |
 | `pixvox mod F.py… --modid ID [--loader fabric\|neoforge] [--mc 26.3\|1.21.1] [--build] [--java-home J] [--zip Z]` | projet de mod Minecraft 26.3, ou 1.21.1 avec NeoForge (+ `.jar` avec `--build`) | `out/mod_ID_LOADER/` |
@@ -191,7 +191,7 @@ déjà en cache, aucun accès réseau. Sans réseau ni cache : erreur `environme
 
 `view`, `anim`, `compare` : `assets[]` avec le chemin produit (`image`, `sheet`, `gif`) ;
 `ascii` : `faces` (bloc), `ascii` (item) ou `slices` (modèle) ; `render-model` : `image`, `quads`,
-`missing` ; `new` : `file`, `kind`, `next` (commandes suivantes) ; `summary` : `text`.
+`missing` ; `new` : `file`, `kind`, `material`, `next` (commandes suivantes) ; `summary` : `text`.
 
 ## Exemples d'intégration
 
