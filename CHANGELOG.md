@@ -7,6 +7,13 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; ve
 
 ### Ajouté
 
+- Bibliothèque de matériaux (#27) : `pixvox.materials` — `planks(v, wood=…)` (12 essences, `WOODS`),
+  `bricks(v)`, `cut_stone(v)`, `ore(v, crystal=…)` (renvoie le masque des cristaux), `metal(v, patina=…)`.
+  Arguments par mot-clé, volumes de 16, 32 ou 64 voxels. Motifs à période qui divise 16 et bruit périodique :
+  raccords sans couture ; joints placés hors des couches de bord (jamais une face entière en mortier) et pièces
+  à cheval sur deux blocs de même teinte. `pixvox new NOM --material bricks` part d'une recette (champ JSON
+  `material`). Exemples `examples/materials.py` (6 blocs) ; catalogue `docs/images/materiaux.png`, que la CI
+  compare octet pour octet à sa régénération (`scripts/readme_images.py --check`).
 - `pixvox watch F.py` (#25) : revue refaite à chaque sauvegarde du fichier et des modules locaux qu'il importe
   (relevé des dates de modification, sans dépendance ; les modules sont rechargés, une palette changée dans
   un import se voit). La planche est réécrite au même chemin ; une erreur est affichée sans arrêter la

@@ -89,6 +89,7 @@ ou environnement / 3 interne (contrat : `docs/cli.md`). `python -m pixvox summar
 | dalle, escalier, mur, barrière, portillon, bouton, plaque d'un matériau | `bloc.variants("slab", "stairs", …)` (toutes si rien) : textures du bloc plein projetées, mêmes raccords ; vrais blocs vanilla dans un mod |
 | même objet à plusieurs tailles / finesses | décrire en unités de conception : `Volume.design(extent, res=, scale=)` |
 | animation (feu, lave, braises, runes) | liste de volumes (`v.frames(n)` + `pulse` / `flow`), `fire()` + `add_cross` |
+| planches, briques, pierre de taille, minerai, métal | `pixvox.materials` : `planks(v, wood=…)`, `bricks(v)`, `cut_stone(v)`, `glow = ore(v, crystal=…)`, `metal(v, patina=…)` ; `pixvox new NOM --material bricks` |
 | herbe, feuillages, eau (couleur du biome) | `tint="grass" \| "foliage" \| "water"` (+ `tinted=masque`, tout le volume sinon) sur Block / Model, voxels peints en gris |
 | itérer à la main sur un asset (humain) | `pixvox watch F.py --html` : planche refaite à chaque sauvegarde ; un agent garde `pixvox review` |
 | juger un bloc à côté des blocs du jeu, partir d'une palette vanilla | `pixvox vanilla` (une fois) puis `pixvox review … [--neighbors stone,oak_planks]` ; `ramp_from_vanilla("stone")` |
@@ -254,6 +255,12 @@ perlin(shape, cells=4, seed=0, octaves=1)   # shape 2D, 3D… ou 4D (x, y, z, te
 - **Caisse / machine** (`reinforced_crate.py`) : panneaux `paint_face(f, sp, at=(2,2))`, cadre éclairé en
   3D, `seamless=False`.
 - **Herbe / mousse** (`mossy_stone.py`) : `cap(MOSS, depth=(1,4))` + `seamless="horizontal"`.
+- **Matériaux** (`examples/materials.py`, planche `docs/images/materiaux.png`) : partir d'une recette de
+  `pixvox.materials` plutôt que de refaire planches et briques à la main. Motifs à période qui divise 16 et
+  joints placés hors des couches de bord : jamais une face entière en mortier ; les briques à cheval sur deux
+  blocs gardent leur teinte. Puis retoucher le volume (mousse avec `cap`, usure avec `tint`). `ore` renvoie le
+  masque des cristaux (`emissive=`). Régénérer le catalogue après un changement de recette :
+  `python scripts/readme_images.py --only materiaux` (la CI le compare octet pour octet).
 - **Herbe / feuillages teintés** : peindre la partie teintée en gris clair (`ramp("#b4b4b4", spread=0.3,
   hue_shift=0, tint=0)` : par défaut `ramp` colore légèrement ses gris, que la teinte salirait ; max
   vers 200 : le jeu multiplie par la couleur du biome), la marquer avec `tinted` (par ex. les voxels changés

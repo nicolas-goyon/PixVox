@@ -76,6 +76,9 @@ jobs:
       - run: python -m pip install -e .
       - name: Export de tous les exemples, vérifié pixel par pixel
         run: pixvox export examples/*.py --pack out/pack --zip out/pixvox_examples_pack.zip --json > export.json
+      - name: Catalogue des matériaux à jour (docs/images/materiaux.png, octet pour octet)
+        if: success() || failure()
+        run: python scripts/readme_images.py --check
       - name: Planches de revue et GIF
         if: success() || failure()
         run: pixvox review examples/*.py --out out/review --json > review.json

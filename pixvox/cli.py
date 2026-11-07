@@ -410,6 +410,20 @@ def _title(name: str) -> str:
     return name.replace("_", " ").strip().capitalize()
 
 
+_MATERIAL_TEMPLATES = {   # appel de la recette, argument du Block, dureté, son, outil
+    "planks": ('planks(v, wood="oak", seed=1)                 # wood : oak, spruce, birch, cherry… (WOODS)',
+               "", "2.0", "wood", "axe"),
+    "bricks": ('bricks(v, color="#965040", mortar="#a39d92", seed=1)   # course=4, length=8 : taille des briques',
+               "", "2.0", "stone", "pickaxe"),
+    "cut_stone": ('cut_stone(v, color="#8f8f8f", seed=1)          # size=8 : taille des blocs de pierre',
+                  "", "1.5", "stone", "pickaxe"),
+    "ore": ('glow = ore(v, stone="#7d7d82", crystal="#3fd0c8", seed=1)   # masque des cristaux',
+            ", emissive=glow, emission=6", "3.0", "stone", "pickaxe"),
+    "metal": ('metal(v, color="#a3a8b0", patina=0.0, seed=1)  # cuivre : color="#c1734b", patina=0.4',
+              "", "5.0", "metal", "pickaxe"),
+}
+
+
 def cmd_new(args, out) -> int:
     import re
     if not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", args.name):
@@ -417,14 +431,21 @@ def cmd_new(args, out) -> int:
     target = Path(args.dir) / f"{args.name}.py"
     if target.exists() and not args.force:
         raise CliError(f"{target} existe déjà (--force pour l'écraser)", file=str(target))
-    tpl = (Path(__file__).parent / "templates" / f"{args.kind}.py").read_text(encoding="utf-8")
+    if args.material and args.kind != "block":
+        raise CliError("--material ne s'utilise qu'avec --kind block")
+    tpl_name = "material.py.tpl" if args.material else f"{args.kind}.py"     # .tpl : pas du Python avant remplacement
+    tpl = (Path(__file__).parent / "templates" / tpl_name).read_text(encoding="utf-8")
+    if args.material:
+        call, extra, strength, sound, tool = _MATERIAL_TEMPLATES[args.material]
+        tpl = (tpl.replace("__MATERIAL__", args.material).replace("__CALL__", call).replace("__EXTRA__", extra)
+               .replace("__STRENGTH__", strength).replace("__SOUND__", sound).replace("__TOOL__", tool))
     text = (tpl.replace("__NAME__", args.name).replace("__TITLE__", _title(args.name))
             .replace("__FILE__", target.as_posix()))
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(text, encoding="utf-8")
     nxt = [f"pixvox review {target.as_posix()}", f"pixvox export {target.as_posix()}"]
     say(f"{target} créé ({args.kind}). Ensuite :\n  " + "\n  ".join(nxt))
-    out.update({"file": target, "kind": args.kind, "name": args.name, "next": nxt})
+    out.update({"file": target, "kind": args.kind, "name": args.name, "next": nxt, "material": args.material})
     return EXIT_OK
 
 
@@ -652,6 +673,8 @@ def build_parser() -> argparse.ArgumentParser:
     n.add_argument("--kind", default="block", choices=KINDS, help="type d'asset (défaut : block)")
     n.add_argument("--dir", default=".", help="DOSSIER où écrire <nom>.py (défaut : dossier courant)")
     n.add_argument("--force", action="store_true", help="écraser le fichier s'il existe")
+    n.add_argument("--material", choices=("planks", "bricks", "cut_stone", "ore", "metal"),
+                   help="bloc plein qui part d'une recette de pixvox.materials (avec --kind block)")
     d = add("doctor", "vérifie l'installation : Python, dépendances, JDK pour les mods, export de test")
     d.add_argument("--java-home", help="dossier d'un JDK à tester")
     s = add("summary", "résumé Markdown (ou texte) d'un résultat --json, pour une CI ou une PR")
