@@ -5,6 +5,8 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; ve
 
 ## [Non publié]
 
+## [0.3.0]
+
 ### Ajouté
 
 - Variantes de construction (#22) : `bloc.variants("slab", "stairs", "wall", "fence", "fence_gate", "button",
