@@ -55,7 +55,7 @@ Champs communs :
 ```json
 {
   "schema": "pixvox.result/2",
-  "pixvox": "0.2.0",
+  "pixvox": "0.3.0",
   "command": "export",
   "ok": true,
   "exit_code": 0,
