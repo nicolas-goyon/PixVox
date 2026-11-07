@@ -90,6 +90,7 @@ ou environnement / 3 interne (contrat : `docs/cli.md`). `python -m pixvox summar
 | même objet à plusieurs tailles / finesses | décrire en unités de conception : `Volume.design(extent, res=, scale=)` |
 | animation (feu, lave, braises, runes) | liste de volumes (`v.frames(n)` + `pulse` / `flow`), `fire()` + `add_cross` |
 | herbe, feuillages, eau (couleur du biome) | `tint="grass" \| "foliage" \| "water"` (+ `tinted=masque`, tout le volume sinon) sur Block / Model, voxels peints en gris |
+| itérer à la main sur un asset (humain) | `pixvox watch F.py --html` : planche refaite à chaque sauvegarde ; un agent garde `pixvox review` |
 | juger un bloc à côté des blocs du jeu, partir d'une palette vanilla | `pixvox vanilla` (une fois) puis `pixvox review … [--neighbors stone,oak_planks]` ; `ramp_from_vanilla("stone")` |
 | partie qui brille la nuit | `emissive=masque, emission=12` sur Block / Model / MultiBlock ; plans `emission=15` |
 | vrai bloc (lumière, collision, particules) | `asset.props = Props(...)` puis `export_mod` |

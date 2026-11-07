@@ -495,6 +495,36 @@ def cmd_summary(args, out) -> int:
     return EXIT_OK
 
 
+def _view_arg(s: str):
+    try:
+        yaw, pitch = (float(x) for x in s.split(","))
+    except ValueError as e:
+        raise CliError(f"--view attend YAW,PITCH en degrés (ex. 135,20), reçu {s!r}") from e
+    return yaw, pitch
+
+
+def cmd_watch(args, out) -> int:
+    from .watch import watch
+    if args.json:
+        raise CliError("watch : --json donne un seul document à la fin ; utiliser --json-lines (un par passage)")
+    view = _view_arg(args.view) if args.view else None
+    real_stdout = sys.__stdout__ or sys.stdout
+
+    def emit(res):
+        if args.json_lines:
+            real_stdout.write(json.dumps(_jsonable(res), ensure_ascii=False) + "\n")
+            real_stdout.flush()
+    try:
+        results = watch(args.file, args.out, only=args.only, view=view, shading=args.shading, interval=args.interval,
+                        passes=args.passes, html_port=args.port if args.html else None, on_pass=emit,
+                        log=(lambda m: say(m, file=sys.stderr)) if args.json_lines else say)
+    except FileNotFoundError as e:
+        raise CliError(str(e), file=args.file) from e
+    out["passes"] = len(results)
+    out["last"] = results[-1] if results else None
+    return EXIT_OK
+
+
 def cmd_vanilla(args, out) -> int:
     from . import vanilla as V
     try:
@@ -512,7 +542,7 @@ def cmd_vanilla(args, out) -> int:
 
 HANDLERS = {"review": cmd_review, "view": cmd_view, "anim": cmd_anim, "ascii": cmd_ascii, "export": cmd_export,
             "mod": cmd_mod, "compare": cmd_compare, "render-model": cmd_render_model, "new": cmd_new,
-            "doctor": cmd_doctor, "summary": cmd_summary, "vanilla": cmd_vanilla}
+            "doctor": cmd_doctor, "summary": cmd_summary, "vanilla": cmd_vanilla, "watch": cmd_watch}
 
 
 # ============================================================================ analyse des arguments
@@ -538,6 +568,17 @@ def build_parser() -> argparse.ArgumentParser:
                    help="code de sortie 1 si l'analyse signale des alertes de ce niveau (défaut : never)")
     r.add_argument("--neighbors", help="blocs vanilla à côté desquels juger l'asset (stone,oak_planks) ; il faut "
                                        "les textures en cache (pixvox vanilla) ; défaut : les plus proches")
+    w = add("watch", "planche de revue régénérée à chaque sauvegarde du fichier (et de ses imports locaux)")
+    w.add_argument("file")
+    w.add_argument("--out", default="out", help="DOSSIER de sortie (défaut : out)")
+    w.add_argument("--only", help=only_help)
+    w.add_argument("--view", help="YAW,PITCH : aussi une vue libre à cet angle (out/<nom>.view_Y_P.png)")
+    w.add_argument("--shading", choices=("gui", "world", "night", "flat"), help="ombrage de la vue libre")
+    w.add_argument("--html", action="store_true", help="sert une page locale qui se recharge seule")
+    w.add_argument("--port", type=int, default=8765, help="port de la page --html (défaut : 8765)")
+    w.add_argument("--json-lines", action="store_true", help="un résultat JSON par passage sur la sortie standard")
+    w.add_argument("--passes", type=_positive, default=None, help="s'arrêter après N passages (scripts, tests)")
+    w.add_argument("--interval", type=float, default=0.4, help="période de relevé en secondes (défaut : 0.4)")
     va = add("vanilla", "met en cache les textures de blocs d'une version de Minecraft (jar client de Mojang)")
     va.add_argument("--mc", default="26.3", help="version (défaut : 26.3 ; aussi 1.21.1)")
     va.add_argument("--force", action="store_true", help="retélécharger même si le cache existe")
