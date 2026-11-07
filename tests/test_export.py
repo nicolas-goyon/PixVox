@@ -513,3 +513,30 @@ def test_export_is_reproducible():
         for name in ("a", "b"):
             export_assets([_board(), animated_model()], tmp / name / "pack", mc="1.21.1", textures="folders", log=None)
         assert files(tmp / "a") == files(tmp / "b")
+
+
+def test_exported_png_are_byte_identical_everywhere():
+    """Un asset de référence s'exporte en PNG identiques octet pour octet sur toutes les machines (#41) :
+    la CI le vérifie sous Linux, Windows et macOS. Échec après une modification voulue de pixvox/png.py
+    ou des pixels de l'asset : mettre à jour les empreintes et le dire dans le CHANGELOG."""
+    import hashlib
+    expected = {
+        "assets/pixvox/textures/block/cube_test_bottom.png": "e5376a24cb76fb3629e5704e2f79560a41a6504337d7df709adf725feaf0c0e6",
+        "assets/pixvox/textures/block/cube_test_east.png": "96267cbdb1f5c8b462a40758f49bd9f3ab7a40318418f8e50d8b6c72a4b9db22",
+        "assets/pixvox/textures/block/cube_test_north.png": "4daeb45c179f543fd79ac53645026ad60bae6cb2ac16ca0b550b2164fcea3aa4",
+        "assets/pixvox/textures/block/cube_test_south.png": "b163e48a3405b2d55c2016231e6f5e3a4187bdb5e82113c02d772473aee2bac3",
+        "assets/pixvox/textures/block/cube_test_top.png": "a285c99064ab9d54af8366b0cf805e852675c66ca50d7e7fab5896ca739030a3",
+        "assets/pixvox/textures/block/cube_test_west.png": "ed9546cfffdd271b416c3f537ed284f1b60899cb1f647fbd280e6475a939b6f2",
+        "assets/pixvox/textures/item/item_test.png": "b1c01558eae8b4f9c5d3600f00eb1c76851a87b628aa8f807c469bec942b72cb",
+        "pack.png": "b500a2d48aa53fadf17876bc4612861f485d3f105d207fc1c8c276f2048ca85f",
+    }
+    with tmpdir() as tmp:
+        pack = ResourcePack(tmp / "pack")
+        pack.add(Block("cube_test", marked_volume()))
+        sp = Sprite(16)
+        sp.rect(4, 4, 11, 11, "#ff8800")
+        pack.add(Item("item_test", sp))
+        pack.finish()
+        got = {p.relative_to(tmp / "pack").as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+               for p in sorted((tmp / "pack").rglob("*.png"))}
+    assert got == expected, {k: v for k, v in got.items() if expected.get(k) != v}

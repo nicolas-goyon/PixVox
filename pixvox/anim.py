@@ -17,6 +17,7 @@ from PIL import Image
 
 from .color import Ramp, rgba
 from .noise import equalize, perlin
+from .png import save_png
 from .sprite import Sprite
 
 # Rampes de feu (sombre -> clair). Le ton 0 sert au liseré extérieur des flammes.
@@ -235,7 +236,7 @@ class Anim:
         from pathlib import Path
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
-        Image.fromarray(self.strip(), "RGBA").save(p)
+        save_png(p, self.strip())
         Path(str(p) + ".mcmeta").write_text(json.dumps(self.mcmeta(), indent=2) + "\n", encoding="utf-8")
 
     def contact(self, scale: int = 6, cols: int | None = None, bg=(24, 26, 32, 255)) -> Image.Image:

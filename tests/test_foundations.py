@@ -88,3 +88,56 @@ def test_frames_are_independent_copies():
     a, b = v.frames(2)
     a.set(a.m_box(0, 0, 0, 0, 0, 0), "#ff0000")
     assert tuple(b.data[0, 0, 0]) == (128, 128, 128, 255) and tuple(v.data[0, 0, 0]) == (128, 128, 128, 255)
+
+
+def _png_reference_image():
+    """Image de référence de l'encodeur PNG : arithmétique entière seulement, identique partout."""
+    y, x = np.mgrid[0:24, 0:20]
+    a = np.zeros((24, 20, 4), np.uint8)
+    a[..., 0] = (x * 13) % 256
+    a[..., 1] = (y * 11) % 256
+    a[..., 2] = ((x ^ y) * 7) % 256
+    a[..., 3] = np.where((x + y) % 5 == 0, 0, 255)
+    a[8:16, 4:12] = (200, 50, 30, 255)
+    return a
+
+
+def test_png_encoder_roundtrips_every_color_type():
+    import io
+    import zlib
+
+    from PIL import Image
+
+    from pixvox.png import encode_png
+    rng = np.random.default_rng(7)
+    noisy = rng.integers(0, 256, (37, 29, 4), dtype=np.uint8)
+    flat = np.zeros((300, 300, 4), np.uint8)                        # longues séries : correspondances de 258
+    cases = [noisy, noisy[..., :3], noisy[..., :2], noisy[..., 0], noisy[..., :1], flat,
+             np.full((1, 1, 4), 9, np.uint8), np.tile(noisy[:3, :5], (40, 60, 1)),
+             _png_reference_image(), Sprite(16).data]
+    real_compress, real_compressobj = zlib.compress, zlib.compressobj
+
+    def forbidden(*a, **k):
+        raise AssertionError("l'encodeur ne doit pas passer par le zlib de la machine")
+    zlib.compress, zlib.compressobj = forbidden, forbidden
+    try:
+        encoded = [encode_png(a) for a in cases]
+    finally:
+        zlib.compress, zlib.compressobj = real_compress, real_compressobj
+    for a, b in zip(cases, encoded):
+        back = np.asarray(Image.open(io.BytesIO(b)))
+        assert np.array_equal(back.reshape(a.shape), a), a.shape
+        assert encode_png(a) == b                                     # même appel → mêmes octets
+    img = Image.fromarray(noisy).convert("P")                          # mode sans équivalent : passe en RGBA
+    assert np.array_equal(np.asarray(Image.open(io.BytesIO(encode_png(img)))), np.asarray(img.convert("RGBA")))
+
+
+def test_png_reference_bytes():
+    """Mêmes pixels → mêmes octets, sur toutes les machines (#41). Si ce test échoue après une
+    modification voulue de pixvox/png.py, mettre à jour l'empreinte et le dire dans le CHANGELOG : les
+    projets qui versionnent des textures pixvox verront tous leurs PNG changer."""
+    import hashlib
+
+    from pixvox.png import encode_png
+    got = hashlib.sha256(encode_png(_png_reference_image())).hexdigest()
+    assert got == "07651084be952252b77a7f7f6cb6a58fee169b41f68927c0ab32e8966feb3ead", got
