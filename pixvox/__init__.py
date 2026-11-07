@@ -29,6 +29,7 @@ from .color import (
 )
 from .noise import equalize, perlin, worley
 from .sprite import Sprite
+from .vanilla import ramp_from_vanilla
 from .variants import SHAPES, Variant
 from .volume import FACE_AXES, FACES, NORMALS, Volume, face_coords
 
@@ -102,7 +103,7 @@ def export_mod(assets, out="out/mod", modid="pixvox_mod", name=None, **kw):
     return _export_mod(assets, out, modid, name, **kw)
 
 
-__all__ = ["verified", "Multipart", "Part", "Variant", "SHAPES", "Block", "Item", "Model", "MultiBlock", "Plane", "Props", "Anim", "Timing", "fire", "pulse",
+__all__ = ["verified", "Multipart", "Part", "Variant", "SHAPES", "ramp_from_vanilla", "Block", "Item", "Model", "MultiBlock", "Plane", "Props", "Anim", "Timing", "fire", "pulse",
            "flow", "FIRE", "SOUL_FIRE", "EMBER", "SOUL_EMBER", "Volume", "Sprite", "Ramp", "ramp",
            "ramp_between", "rgba", "hexa", "mix", "adjust", "lighten", "darken", "shade", "lightness",
            "luminance", "delta_e", "nearest", "perlin", "worley", "equalize", "FACES", "NORMALS",

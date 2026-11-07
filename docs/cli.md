@@ -17,7 +17,7 @@ python -m pixvox …        # équivalent, utile sans installation (depuis un cl
 | commande | rôle | sorties |
 |---|---|---|
 | `pixvox new NOM [--kind block\|model\|multiblock\|item\|animated] [--dir D]` | fichier d'asset de départ, prêt à modifier | `D/NOM.py` |
-| `pixvox review F.py… [--out D] [--only NOM] [--fail-on never\|warn\|err]` | planche de revue + rapport (+ planche d'animation et GIF) | `D/<nom>.review.png`, `.report.txt`, `.anim.png`, `.anim.gif` |
+| `pixvox review F.py… [--out D] [--only NOM] [--fail-on never\|warn\|err] [--neighbors a,b]` | planche de revue + rapport (+ planche d'animation et GIF) | `D/<nom>.review.png`, `.report.txt`, `.anim.png`, `.anim.gif` |
 | `pixvox export F.py… [--pack D] [--ns NS] [--zip Z] [--replace nom=minecraft:bloc] [--mc 1.21.4+\|1.21.1] [--textures flat\|folders]` | resource pack Java vérifié par re-rendu, pour 1.21.4 → 26.3 (défaut) ou 1.21.1 (NeoForge 21.1) | `D/` (+ `Z`, `D_datapack/` pour les multiblocs) |
 | `pixvox mod F.py… --modid ID [--loader fabric\|neoforge] [--mc 26.3\|1.21.1] [--build] [--java-home J] [--zip Z]` | projet de mod Minecraft 26.3, ou 1.21.1 avec NeoForge (+ `.jar` avec `--build`) | `out/mod_ID_LOADER/` |
 | `pixvox view F.py --yaw Y --pitch P [--persp 2] [--shading gui\|world\|night\|flat] [--tick T] [--biome B]` | rendu à un angle libre (`--biome` : couleur des voxels teintés) | `out/<nom>.view_Y_P.png` |
@@ -25,6 +25,7 @@ python -m pixvox …        # équivalent, utile sans installation (depuis un cl
 | `pixvox compare F.py… [--out IMG]` | variantes côte à côte | `IMG` |
 | `pixvox ascii F.py [--face up\|…]` | pixels exacts en texte | (sortie standard) |
 | `pixvox render-model PACK ns:block/nom [--out IMG] [--mc 1.21.4+\|1.21.1]` | aperçu d'un modèle JSON quelconque (pack fait main, Blockbench…), lu comme la version choisie | `IMG` |
+| `pixvox vanilla [--mc 26.3\|1.21.1] [--force]` | met en cache les textures de blocs du jeu (jar client de Mojang, SHA-1 vérifié) | cache local (`$PIXVOX_CACHE/vanilla/<mc>`) |
 | `pixvox doctor [--java-home J]` | Python, dépendances, JDK, export de test | — |
 | `pixvox summary RESULT.json [--format markdown\|text]` | résumé lisible d'un résultat `--json` | (sortie standard) |
 
@@ -40,7 +41,7 @@ Le contrat change de numéro (`schema`) quand ses champs changent : `pixvox.resu
 |---|---|---|
 | `0` | réussi | tout est exporté et vérifié |
 | `1` | **vérification échouée** : le travail est fait mais n'est pas bon | écart de rendu après export, asset refusé par les limites du jeu, compilation ou test JUnit du mod en échec, `--fail-on` atteint, textures manquantes (`render-model`) |
-| `2` | **utilisation ou environnement** : rien n'a pu être évalué | fichier absent, `build()` qui lève une exception (ou appelle `sys.exit`), argument invalide (`--ns` hors `[a-z0-9_.-]`, taille ≤ 0…), nom introuvable avec `--only`, dossier de sortie refusé, JDK de la cible absent pour `--build` (25, ou 21 avec `--mc 1.21.1`), `--mc 1.21.1` sans `--loader neoforge` |
+| `2` | **utilisation ou environnement** : rien n'a pu être évalué | fichier absent, `build()` qui lève une exception (ou appelle `sys.exit`), argument invalide (`--ns` hors `[a-z0-9_.-]`, taille ≤ 0…), nom introuvable avec `--only`, dossier de sortie refusé, `pixvox vanilla` sans réseau ni cache, JDK de la cible absent pour `--build` (25, ou 21 avec `--mc 1.21.1`), `--mc 1.21.1` sans `--loader neoforge` |
 | `3` | erreur interne de pixvox (bogue : la trace est sur la sortie d'erreur) | — |
 
 ## Mode `--json`
@@ -146,6 +147,18 @@ pour le mur, 17 configurations), `details.elements`, `details.render_type`. `mod
 Sans `--build`, `jar` et `build` valent `null`. Le test JUnit généré démarre les registres de
 Minecraft avec le mod (sans ouvrir le jeu) et vérifie chaque bloc. `mc` : version visée (`--mc`), `26.3`
 (défaut, Fabric ou NeoForge, JDK 25) ou `1.21.1` (NeoForge seulement, JDK 21 ; ressources de `export --mc 1.21.1`).
+
+### `vanilla`
+
+```json
+{"mc": "26.3", "cache": "/home/moi/.cache/pixvox/vanilla/26.3", "textures": 1300, "materials": 417,
+ "sha1": "e877b6a0…", "downloaded": true}
+```
+
+`materials` : textures que le jeu pose sur un cube plein (comparées à l'asset par l'analyse). `downloaded` faux :
+déjà en cache, aucun accès réseau. Sans réseau ni cache : erreur `environment` (code 2). Avec ce cache,
+`review` ajoute des constats `Vanilla` (matériaux proches, écarts de clarté et de saturation aux voisins,
+`--neighbors`) et une rangée « dans le monde » à la planche ; sans cache, rien ne change.
 
 ### `doctor`
 

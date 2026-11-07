@@ -42,6 +42,15 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; ve
   `details.tint`, `tint_faces` / `tinted_elements`. Sans mod, l'export rappelle que seul `--replace` sur un
   bloc vanilla teinté affiche la couleur ; les variantes d'un bloc teinté sont refusées. Exemples :
   `examples/meadow_grass.py` (herbe), `examples/willow_leaves.py` (feuillage).
+- Textures vanilla de référence (#24) : `pixvox vanilla [--mc 26.3|1.21.1]` télécharge le jar client de la
+  version (manifeste piston-meta de Mojang, SHA-1 vérifié), en garde les textures de blocs dans un cache local
+  (`$PIXVOX_CACHE`, sinon le cache de l'utilisateur) et supprime le jar ; ensuite tout marche hors ligne. Les
+  matériaux sont les textures que le jeu pose sur un cube plein (lues dans ses modèles). Analyse : matériaux
+  vanilla les plus proches, et « N % plus clair / plus saturé que stone » face aux voisins (`--neighbors`, sinon
+  les deux plus proches pour un bloc). Planche : rangée « dans le monde », l'asset posé entre deux blocs du
+  jeu. `ramp_from_vanilla("stone")` : rampe tirée d'une texture du jeu. Sans cache, rien ne change (aucun
+  téléchargement implicite) ; les textures ne vont jamais dans un pack ou un mod (droits de Mojang). Tests
+  sur un faux serveur Mojang local, plus un test du vrai manifeste (sauté sans réseau).
 - Couleurs de biome dans les mods (#23), côté client seulement : 26.3, `BlockTintSources.grass()` / `foliage()` /
   `water()` enregistrées par `BlockColorRegistry` (Fabric, point d'entrée `client`) ou
   `RegisterColorHandlersEvent.BlockTintSources` (NeoForge), la teinte des objets venant de `items/<nom>.json` ;

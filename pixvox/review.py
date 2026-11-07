@@ -548,14 +548,53 @@ def _sheet_variant(v, findings) -> Image.Image:
     return _analysis_panel(cv, 16, y2, W - 32, findings)
 
 
-def review_data(asset, out_dir="out") -> dict:
+def _vanilla_row(cv: Image.Image, asset, neighbors=None) -> Image.Image:
+    """Rangée « dans le monde » : l'asset posé entre deux blocs vanilla (textures du cache local), sur un sol du
+    premier. Voisins : `neighbors`, sinon ses deux matériaux vanilla les plus proches pour un bloc plein ou une
+    variante, stone et oak_planks pour un objet (posé devant)."""
+    from . import vanilla as V
+    from .analyze import asset_colors
+    mc = V.cached_version()
+    if mc is None or isinstance(asset, Item):
+        return cv
+    from .variants import Variant
+    nb = list(neighbors or [])
+    if not nb and isinstance(asset, (Block, Variant)):
+        colors = asset_colors(asset)
+        nb = [n["name"] for n in V.nearest_materials(colors, mc, k=2)] if colors is not None and len(colors) else []
+    nb = (nb or ["stone", "oak_planks"]) * 2
+    try:
+        f0, f1 = V.block_faces(nb[0], mc), V.block_faces(nb[1], mc)
+    except KeyError:
+        return cv
+    q = []
+    for x in range(5):
+        for z in range(3):
+            q += cube_quads(f0, offset=(x * 16, -16, z * 16))                    # sol
+    for x, faces in ((0, f1), (1, f0), (3, f0), (4, f1)):
+        q += cube_quads(faces, offset=(x * 16, 0, 0))                            # mur du fond
+    spot = (2, 0, 0) if isinstance(asset, Block) else (2, 0, 1)                  # bloc : dans le mur ; sinon devant
+    q += [x.translated(np.array(spot, float) * 16) for x in asset_quads(asset, 0)]
+    H = 440
+    out = Image.new("RGBA", (cv.width, cv.height + H), BG)
+    out.alpha_composite(cv, (0, 0))
+    box = _panel(out, 16, cv.height, cv.width - 32, H - 16,
+                 f"Dans le monde, entre {nb[0]} et {nb[1]} (textures vanilla {mc} du cache local, ombrage en jeu)")
+    img = render(q, fit_camera(q, INVENTORY, box[2] - 20, H - 70, 0.04), shading="world")
+    _paste_center(out, _img(img), box)
+    return out
+
+
+def review_data(asset, out_dir="out", neighbors=None) -> dict:
     """Planche de revue PNG + rapport texte (+ planche d'animation et GIF), sans rien afficher.
+    Avec les textures vanilla en cache (`pixvox vanilla`) : écarts aux matériaux du jeu dans l'analyse, et
+    rangée « dans le monde » entre `neighbors` (noms de textures vanilla, sinon les plus proches).
 
     Renvoie {name, sheet, report_file, report, findings, anim} ; anim = (png, gif) ou None.
     """
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    findings = analyze(asset)
+    findings = analyze(asset, neighbors)
     from .variants import Variant
     if isinstance(asset, Variant):
         sheet = _sheet_variant(asset, findings)
@@ -569,6 +608,7 @@ def review_data(asset, out_dir="out") -> dict:
         sheet = _sheet_model(asset, findings)
     else:
         sheet = _sheet_item(asset, findings)
+    sheet = _vanilla_row(sheet, asset, neighbors)
     path = out / f"{asset.name}.review.png"
     sheet.convert("RGB").save(path)
     report = format_report(asset, findings)

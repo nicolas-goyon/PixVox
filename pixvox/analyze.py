@@ -578,7 +578,72 @@ def analyze_variant(v) -> list:
     return out
 
 
-def analyze(asset) -> list:
+def asset_colors(asset) -> np.ndarray | None:
+    """Couleurs visibles d'un asset ((n, 4) uint8), voxels teintés exclus (gris) ; None pour un item."""
+    from .variants import Variant
+    if isinstance(asset, Variant):
+        asset = asset.base
+    if isinstance(asset, Multipart):
+        parts = [asset_colors(m) for m in {id(m): m for m in asset.models + [asset.item]}.values()]
+        parts = [p for p in parts if p is not None and len(p)]
+        return np.concatenate(parts) if parts else None
+    if isinstance(asset, Block):
+        masks = asset.tint_masks()
+        px = [s.data[(s.data[..., 3] > 0) & ~masks.get(f, np.zeros(s.data.shape[:2], bool))]
+              for f, s in asset.faces().items()]
+        return np.concatenate(px)
+    if isinstance(asset, (Model, MultiBlock)):
+        sel = asset.volume.m_surface()
+        if getattr(asset, "tinted", None) is not None:
+            sel = sel & ~asset.tinted
+        return asset.volume.data[sel]
+    return None
+
+
+def vanilla_findings(asset, neighbors=None, mc: str | None = None) -> list:
+    """Couleur moyenne de l'asset à côté des matériaux du jeu (textures du cache local, `pixvox vanilla`) :
+    les plus proches, puis l'écart de clarté et de saturation à chaque voisin (`neighbors` ; par défaut, pour un
+    bloc plein ou une variante, ses deux matériaux les plus proches ; un objet n'est jugé qu'avec des voisins
+    donnés, sa couleur n'ayant pas à imiter un matériau). Rien si le cache est vide (aucun téléchargement ici)."""
+    from . import vanilla as V
+    from .variants import Variant
+    mc = mc or V.cached_version()
+    colors = asset_colors(asset)
+    if mc is None or colors is None or len(colors) < 8:
+        return []
+    try:
+        near = V.nearest_materials(colors, mc, k=3)
+        if neighbors:
+            refs = list(neighbors)
+        else:
+            refs = [n["name"] for n in near[:2]] if isinstance(asset, (Block, Variant)) else []
+        deltas = [V.material_delta(colors, r, mc) for r in refs]
+    except (V.VanillaUnavailable, KeyError, OSError) as e:
+        return [Finding("WARN", "Vanilla", f"comparaison impossible : {e}")]
+    out = [Finding("INFO", "Vanilla", f"({mc}) couleur moyenne proche de "
+                   + ", ".join(f"{n['name']} (ΔE {n['delta_e']:g})" for n in near))]
+    for d in deltas:
+        bad = []
+        if abs(d["lighter"]) >= 0.15:
+            bad.append(f"{abs(d['lighter']) * 100:.0f} % plus {'clair' if d['lighter'] > 0 else 'sombre'}")
+        if d["more_saturated"] >= 0.5:
+            bad.append(f"{d['more_saturated'] * 100:.0f} % plus saturé")
+        if bad:
+            out.append(Finding("WARN", "Vanilla", f"à côté de {d['name']} : {' et '.join(bad)} (ΔE {d['delta_e']:g}) ; "
+                               "il risque de détonner (planche : rangée « dans le monde »)"))
+        else:
+            out.append(Finding("OK", "Vanilla", f"s'accorde avec {d['name']} : clarté {round(d['lighter'] * 100):+d} %, "
+                               f"saturation {round(d['more_saturated'] * 100):+d} % (ΔE {d['delta_e']:g})"))
+    return out
+
+
+def analyze(asset, neighbors=None) -> list:
+    """Constats de l'asset ; avec le cache vanilla (`pixvox vanilla`), écarts aux matériaux du jeu (`neighbors` :
+    noms de textures vanilla à comparer, sinon les deux plus proches)."""
+    return _analyze(asset) + vanilla_findings(asset, neighbors)
+
+
+def _analyze(asset) -> list:
     from .variants import Variant
     if isinstance(asset, Variant):
         return analyze_variant(asset)
