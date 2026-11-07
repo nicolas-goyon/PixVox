@@ -130,8 +130,6 @@ def test_variants_without_the_base_block_and_refusals():
         assert verified(info)
         assert (tmp / "pack" / "assets" / "pixvox" / "textures" / "block" / "cube_test_north.png").exists()
         _raises(ExportError, "--replace", lambda: pack.add(b.variants("stairs")[0], replace="minecraft:stone_stairs"))
-        from pixvox import export_mod
-        _raises(ExportError, "variantes de construction", lambda: export_mod(b.variants("wall"), tmp / "mod", "demo"))
     from pixvox.cli import asset_kind
     assert asset_kind(b.variants("fence")[0]) == "variant" and asset_kind(b) == "block"
     names = [v.name for v in b.variants("slab", "wall", names={"wall": "cube_test_rempart"})]

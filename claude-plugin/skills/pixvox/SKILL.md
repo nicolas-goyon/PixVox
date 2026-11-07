@@ -86,7 +86,7 @@ ou environnement / 3 interne (contrat : `docs/cli.md`). `python -m pixvox summar
 | forme libre (champignon, brasero, lanterne) | `Model(name, volume)` → éléments + atlas (limite [-16, 32]) |
 | objet de plusieurs blocs (statue, arbre, machine) | `MultiBlock(name, volume)` : sans limite de taille |
 | bloc dont les parties dépendent de ses propriétés | `Multipart(name, parts, properties, facing=True, item=…)` : blockstate `multipart` (export seulement, pas `pixvox mod`) |
-| dalle, escalier, mur, barrière, portillon, bouton, plaque d'un matériau | `bloc.variants("slab", "stairs", …)` (toutes si rien) : textures du bloc plein projetées, mêmes raccords |
+| dalle, escalier, mur, barrière, portillon, bouton, plaque d'un matériau | `bloc.variants("slab", "stairs", …)` (toutes si rien) : textures du bloc plein projetées, mêmes raccords ; vrais blocs vanilla dans un mod |
 | même objet à plusieurs tailles / finesses | décrire en unités de conception : `Volume.design(extent, res=, scale=)` |
 | animation (feu, lave, braises, runes) | liste de volumes (`v.frames(n)` + `pulse` / `flow`), `fire()` + `add_cross` |
 | partie qui brille la nuit | `emissive=masque, emission=12` sur Block / Model / MultiBlock ; plans `emission=15` |
@@ -253,7 +253,10 @@ perlin(shape, cells=4, seed=0, octaves=1)   # shape 2D, 3D… ou 4D (x, y, z, te
   regarde : la dalle du bas montre le bas des côtés, la marche le haut (coulures de mousse comprises), et un
   escalier tourné vers l'est montre la face « est » du volume. Un bloc encadré (`seamless=False`) se décline
   mal (le cadre est coupé : alerte de l'analyse). La planche montre l'objet, une scène sur le bloc plein et
-  les états caractéristiques ; l'export relit chaque état du blockstate (40 pour l'escalier).
+  les états caractéristiques ; l'export relit chaque état du blockstate (40 pour l'escalier). Exemple :
+  `mossy_stone_family.py`. Dans un mod : SlabBlock, StairBlock, WallBlock… (le mur et la barrière se
+  raccordent grâce aux tags `walls`, `fences`) ; les `Props` sont celles du bloc plein, sauf
+  `variante.props = Props(…)` ; noms affichés tirés de ceux du bloc plein (« Dalle de … »).
 - **Bûche** (`ashen_log.py`) : cernes + écorce `noise(cells=(6,1,6))`, `states="axis"`.
 - **Modèle organique** (`glowcap.py`) : ellipsoïdes, `shade(noise=0.1–0.2)`.
 - **Item** (`lumenite_shard.py`) : ASCII, contour très sombre teinté, lumière haut-gauche.

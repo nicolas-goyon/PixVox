@@ -141,3 +141,53 @@ def test_mod_1_21_1_refuses_what_the_game_does_not_have():
                 assert "1.21.1" in str(e)
             else:
                 raise AssertionError(props)
+
+
+def test_mod_registers_construction_variants():
+    """Variantes : vrais blocs vanilla (sous-classes pour les constructeurs protégés), tags qui permettent
+    les raccords, butin de la dalle double et recette de taille au format de chaque version, test JUnit."""
+    base = Block("plain_test", marked_volume())
+    base.props = Props(sound="wood", tool="axe", names={"fr_fr": "Planche test", "en_us": "Test Plank"})
+    for loader, mc in (("fabric", "26.3"), ("neoforge", "26.3"), ("neoforge", "1.21.1")):
+        with tmpdir() as tmp:
+            res = export_mod([*base.variants(), base], tmp / "mod", "pv_test", loader=loader, mc=mc, quiet=True)
+            root = res["project"]
+            java = root / "src/main/java/pixvox/pv_test"
+            content = (java / "ModContent.java").read_text(encoding="utf-8")
+            assert content.index("PLAIN_TEST =") < content.index("PLAIN_TEST_STAIRS =")    # bloc plein déclaré avant
+            get = ".get()" if loader == "neoforge" else ""
+            assert f"new PixvoxStairBlock(PLAIN_TEST{get}.defaultBlockState(), p)" in content
+            assert "SlabBlock::new" in content and "new FenceGateBlock(WoodType.OAK, p)" in content
+            assert "new PixvoxButtonBlock(BlockSetType.OAK, 30, p)" in content           # bois : 30 ticks
+            for cls in ("PixvoxStairBlock", "PixvoxButtonBlock", "PixvoxPressurePlateBlock"):
+                assert (java / f"block/{cls}.java").exists(), cls
+            test = (root / "src/test/java/pixvox/pv_test/GeneratedContentTest.java").read_text(encoding="utf-8")
+            assert test.count('checkVariant("') == 7
+            assert '{"shape", "straight", "inner_left", "inner_right", "outer_left", "outer_right"}' in test
+            data = root / "src/main/resources/data"
+            tdir = data / "minecraft/tags/block"
+            tags = {p.relative_to(tdir).with_suffix("").as_posix(): json.loads(p.read_text(encoding="utf-8"))["values"]
+                    for p in tdir.rglob("*.json")}
+            assert tags["walls"] == ["pv_test:plain_test_wall"] and "pv_test:plain_test_fence" in tags["wooden_fences"]
+            assert "pv_test:plain_test_fence" in tags["fences"]          # FenceBlock ne se raccorde qu'à son tag
+            assert "pv_test:plain_test_slab" in tags["mineable/axe"]
+            assert (data / "minecraft/tags/item/slabs.json").exists()
+            loot = json.loads((data / "pv_test/loot_table/blocks/plain_test_slab.json").read_text(encoding="utf-8"))
+            recipe = json.loads((data / "pv_test/recipe/plain_test_slab_from_plain_test_stonecutting.json")
+                                .read_text(encoding="utf-8"))
+            assert recipe["result"] == {"count": 2, "id": "pv_test:plain_test_slab"}
+            entry = loot["pools"][0]["entries"][0]
+            if mc == "1.21.1":
+                assert recipe["ingredient"] == {"item": "pv_test:plain_test"}
+                assert entry["functions"][0]["conditions"][0]["properties"] == {"type": "double"}
+            else:
+                assert recipe["ingredient"] == "pv_test:plain_test"
+                assert entry["modifier"][0]["condition"]["state"] == {"type": "double"}
+            lang = json.loads((root / "src/main/resources/assets/pv_test/lang/fr_fr.json").read_text(encoding="utf-8"))
+            assert lang["block.pv_test.plain_test_slab"] == "Dalle de planche test"
+            assert lang["block.pv_test.plain_test_fence_gate"] == "Portillon de planche test"
+    with tmpdir() as tmp:                       # sans le bloc plein : escalier sur la pierre, pas de recette
+        root = export_mod(base.variants("stairs"), tmp / "mod", "pv_test", quiet=True)["project"]
+        assert "new PixvoxStairBlock(Blocks.STONE.defaultBlockState(), p)" in \
+            (root / "src/main/java/pixvox/pv_test/ModContent.java").read_text(encoding="utf-8")
+        assert not (root / "src/main/resources/data/pv_test/recipe").exists()

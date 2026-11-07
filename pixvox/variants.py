@@ -251,6 +251,7 @@ class Variant(Asset):
         if s == "wall":
             return [_box((4, 0, 4), (12, 16, 12)), _box((5, 0, 0), (11, 13, 16))]
         if s == "fence":
+            # traverses dans le bloc (0..16) ; vanilla les fait dépasser (-2..18) avec des UV écrits à la main
             return [_box((6, 0, 0), (10, 16, 4)), _box((6, 0, 12), (10, 16, 16)),
                     _box((7, 13, 0), (9, 15, 16)), _box((7, 5, 0), (9, 7, 16))]
         if s == "button":

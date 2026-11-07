@@ -1350,7 +1350,8 @@ class ResourcePack:
 
 
 # ============================================================================ export d'une liste d'assets
-KINDS_EN = {"bloc": "block", "modèle": "model", "multibloc": "multiblock", "item": "item", "multipart": "multipart"}
+KINDS_EN = {"bloc": "block", "modèle": "model", "multibloc": "multiblock", "item": "item", "multipart": "multipart",
+            "variante": "variant"}
 NAMESPACE_RE = re.compile(r"[a-z0-9_.-]+")
 
 
