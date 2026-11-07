@@ -5,6 +5,8 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; ve
 
 ## [Non publié]
 
+## [0.4.0]
+
 ### Ajouté
 
 - Import de modèles (#26) : `pixvox import PACK ns:block/nom` (dossier, .zip ou le .jar du jeu) et `pixvox import
