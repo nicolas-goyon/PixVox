@@ -90,6 +90,7 @@ ou environnement / 3 interne (contrat : `docs/cli.md`). `python -m pixvox summar
 | dalle, escalier, mur, barrière, portillon, bouton, plaque d'un matériau | `bloc.variants("slab", "stairs", …)` (toutes si rien) : textures du bloc plein projetées, mêmes raccords ; vrais blocs vanilla dans un mod |
 | même objet à plusieurs tailles / finesses | décrire en unités de conception : `Volume.design(extent, res=, scale=)` |
 | animation (feu, lave, braises, runes) | liste de volumes (`v.frames(n)` + `pulse` / `flow`), `fire()` + `add_cross` |
+| herbe, feuillages, eau (couleur du biome) | `tint="grass" \| "foliage" \| "water"` (+ `tinted=masque`, tout le volume sinon) sur Block / Model, voxels peints en gris |
 | partie qui brille la nuit | `emissive=masque, emission=12` sur Block / Model / MultiBlock ; plans `emission=15` |
 | vrai bloc (lumière, collision, particules) | `asset.props = Props(...)` puis `export_mod` |
 | petit modèle perdu / trop grand dans la case | `Model(…, inventory_scale=1.6 ou 0.8, inventory_center=True)` |
@@ -234,6 +235,8 @@ Multipart("tableau", [Part(base, {"column": 1}),                  # une valeur, 
                      Part.empty("tableau_vide", base, {"OR": [{"column": [0, 2]}, {"row": [0, 2]}]})],
           {"column": range(3), "row": range(3), "papers": range(8)},
           facing=True, item=complet, item_display={...})         # item : modèle de l'objet en main
+Block(…, tint="grass" | "foliage" | "water", tinted=masque)   Model(…, tint=…, tinted=…)
+                                              # voxels teintés en gris ; b.quads(tick, biome="swamp")
 bloc.variants(*shapes, names={"wall": "…"})   # [Variant] ; shapes parmi SHAPES : slab, stairs, wall, fence,
                                               # fence_gate, button, pressure_plate ; noms <bloc>_<variante>
 export_pack([...], root="out/pack", namespace="pixvox", zip_path=None, replace={"nom": "minecraft:stone"},
@@ -249,6 +252,13 @@ perlin(shape, cells=4, seed=0, octaves=1)   # shape 2D, 3D… ou 4D (x, y, z, te
 - **Caisse / machine** (`reinforced_crate.py`) : panneaux `paint_face(f, sp, at=(2,2))`, cadre éclairé en
   3D, `seamless=False`.
 - **Herbe / mousse** (`mossy_stone.py`) : `cap(MOSS, depth=(1,4))` + `seamless="horizontal"`.
+- **Herbe / feuillages teintés** : peindre la partie teintée en gris clair (`ramp("#b4b4b4", spread=0.3)`, max
+  vers 200 : le jeu multiplie par la couleur du biome), la marquer avec `tinted` (par ex. les voxels changés
+  par `cap`) et `tint="grass"`. Le dessus entièrement teinté porte `tintindex` ; les côtés mixtes reçoivent une
+  surcouche teintée (pixels de l'herbe seulement), comme le bloc d'herbe vanilla. Feuillages : `tint="foliage"`
+  sans masque (tout le bloc), trous transparents → rendu cutout. La planche montre le bloc dans trois biomes
+  (plaine, marais, désert) ; `pixvox view … --biome jungle` pour un autre. Sans mod, la couleur n'apparaît en
+  jeu que par `--replace` sur `minecraft:grass_block` / `oak_leaves` (alerte de l'export).
 - **Famille de construction** : `pierre.variants()` sur un bloc qui se raccorde (`seamless=True` ou
   `"horizontal"`). Chaque élément montre la peau du bloc plein à cet endroit, dans la direction où il
   regarde : la dalle du bas montre le bas des côtés, la marche le haut (coulures de mousse comprises), et un

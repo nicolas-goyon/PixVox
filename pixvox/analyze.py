@@ -197,8 +197,29 @@ def _anim_tex_findings(anim: Anim, label: str) -> list:
 
 
 # ----------------------------------------------------------------------------- blocs
+def _tint_findings(asset, vol) -> list:
+    """Voxels teintés : gris attendu (le jeu multiplie par la couleur du biome), genre et faces concernées."""
+    if getattr(asset, "tint", None) is None:
+        return []
+    from .tint import VANILLA_HINT
+    rgb = vol.data[asset.tinted][:, :3].astype(int)
+    spread = (rgb.max(axis=1) - rgb.min(axis=1)) if len(rgb) else np.zeros(0)
+    out = [Finding("INFO", "Teinte", f"{asset.tint} : {int(asset.tinted.sum())} voxels multipliés par la couleur du "
+                   f"biome (plaine sur la planche) ; {VANILLA_HINT[asset.tint]}")]
+    colored = int((spread > 12).sum())
+    if colored:
+        out.append(Finding("WARN", "Teinte", f"{colored} voxels teintés ne sont pas gris (écart de canaux > 12) : la "
+                           "couleur du biome s'y mélange à la leur ; les peindre en niveaux de gris"))
+    else:
+        out.append(Finding("OK", "Teinte", "voxels teintés en niveaux de gris"))
+    if len(rgb) and rgb.max() < 140:
+        out.append(Finding("WARN", "Teinte", "voxels teintés sombres (max < 140) : la couleur du biome sera terne ; "
+                           "les textures vanilla d'herbe montent vers 200"))
+    return out
+
+
 def analyze_block(b: Block) -> list:
-    out = []
+    out = _tint_findings(b, b.volume)
     faces = b.faces()
     if b.source == "volume":
         out.append(Finding("OK", "Arêtes", "cohérentes par construction (textures lues sur la peau du volume)"))
@@ -320,6 +341,10 @@ def _journal(log) -> list:
 
 # ----------------------------------------------------------------------------- modèles
 def analyze_model(m: Model) -> list:
+    return _tint_findings(m, m.volume) + _analyze_model(m)
+
+
+def _analyze_model(m: Model) -> list:
     from .export import optimize_model
     out = []
     v = m.volume

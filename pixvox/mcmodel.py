@@ -26,6 +26,7 @@ import numpy as np
 from PIL import Image
 
 from .render import Quad, closest_face
+from .tint import apply_tint
 
 # Coins de chaque face, dans l'ordre des sommets du jeu (net.minecraft.client.renderer.FaceInfo)
 FACE_INFO = {
@@ -125,7 +126,8 @@ def missing_texture() -> np.ndarray:
 class ModelLoader:
     """Charge des modèles depuis un ou plusieurs dossiers de resource pack (contenant assets/)."""
 
-    def __init__(self, pack_roots=(), extra_textures: dict | None = None, tick: float = 0, mc: str = "1.21.4+"):
+    def __init__(self, pack_roots=(), extra_textures: dict | None = None, tick: float = 0, mc: str = "1.21.4+",
+                 tint=None):
         if mc not in DIALECTS:
             raise ValueError(f"mc={mc!r} : choisir parmi {', '.join(DIALECTS)}")
         self.roots = [Path(p) for p in pack_roots]
@@ -134,6 +136,7 @@ class ModelLoader:
         self.tick = tick              # textures animées : image affichée à ce tick (lu dans le .png.mcmeta)
         self.mc = mc                  # lecture du jeu visé (voir l'en-tête du module)
         self._cache: dict = {}        # une seule copie de chaque texture (un atlas peut servir à 5000 faces)
+        self.tint = tint              # (r, g, b) : couleur appliquée aux faces à tintindex (celle d'un biome)
 
     def _find(self, kind: str, ref: str, ext: str):
         ns, path = norm_id(ref).split(":", 1)
@@ -240,7 +243,7 @@ class ModelLoader:
         off = np.asarray(offset, float)
         layer = render_layer(res["render_type"]) if self.mc == "1.21.1" else None
         for el in res["elements"]:
-            out += element_quads(el, lambda key: self._tex_for(res["textures"], key, layer), off, self.mc)
+            out += element_quads(el, lambda key: self._tex_for(res["textures"], key, layer), off, self.mc, self.tint)
         if res["builtin"] == "generated":
             layer0 = self._deref(res["textures"], "#layer0")
             if layer0:
@@ -359,7 +362,9 @@ def _rotate(points: np.ndarray, rot: dict) -> np.ndarray:
     return p + origin
 
 
-def element_quads(el: dict, tex_lookup, offset=(0.0, 0.0, 0.0), mc: str = "1.21.4+") -> list:
+def element_quads(el: dict, tex_lookup, offset=(0.0, 0.0, 0.0), mc: str = "1.21.4+", tint=None) -> list:
+    """Quads d'un élément de modèle. tint : (r, g, b) multiplié aux faces qui ont un tintindex (comme le jeu
+    avec la couleur du biome) ; None : texture telle quelle (bloc sans couleur enregistrée, gris)."""
     offset = np.asarray(offset, float)
     frm = np.asarray(el["from"], float)
     to = np.asarray(el["to"], float)
@@ -374,6 +379,8 @@ def element_quads(el: dict, tex_lookup, offset=(0.0, 0.0, 0.0), mc: str = "1.21.
     out = []
     for face, fd in el.get("faces", {}).items():
         tex = tex_lookup(fd["texture"])
+        if tint is not None and int(fd.get("tintindex", -1)) >= 0:
+            tex = apply_tint(tex, tint)
         th, tw = tex.shape[:2]
         uv = fd.get("uv") or auto_uv(face, frm, to)
         rot = int(fd.get("rotation", 0)) % 360

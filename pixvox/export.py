@@ -50,8 +50,12 @@ from .assets import Block, Item, Model, MultiBlock, Multipart, Plane
 from .mcmodel import ModelLoader, auto_uv
 from .png import save_png
 from .render import BACK, INVENTORY, compare, fit_camera, quads_from_volume, render, rot_matrix
+from .tint import ITEM_TINTS, tint_color
 from .variants import Variant
 from .volume import FACES, NORMALS, face_coords
+
+# blocs vanilla dont la couleur de biome est enregistrée par le jeu (essai sans mod : --replace)
+VANILLA_TINTED = {"grass": "minecraft:grass_block", "foliage": "minecraft:oak_leaves", "water": "minecraft:water_cauldron"}
 
 
 class ExportError(ValueError):
@@ -375,8 +379,11 @@ def _build(datas, vol, boxes, voxel_size, origin, emission: int = 15):
                 fd["cullface"] = f
             faces[f] = fd
             nf += 1
+        if em & 2:                                    # voxels teintés : couleur du biome (tintindex)
+            for fd in faces.values():
+                fd["tintindex"] = 0
         el = {"from": frm, "to": to, "faces": faces}
-        if em and emission:
+        if em & 1 and emission:
             el["light_emission"] = int(emission)
         elements.append(el)
     return elements, a0, a1, nf
@@ -389,10 +396,13 @@ def _opacity_groups(datas, solid):
     return (semi, solid & ~semi) if semi.any() and (solid & ~semi).any() else None
 
 
-def _box_groups(solid, emissive, opacity) -> list:
-    """Groupes (émissif, voxels) découpés séparément : émissifs d'abord, puis, si le volume mélange les
-    opacités, chaque groupe séparé en semi-transparent et opaque."""
+def _box_groups(solid, emissive, opacity, tinted=None) -> list:
+    """Groupes (drapeaux, voxels) découpés séparément : émissifs (bit 1), teintés (bit 2), puis le reste ; si le
+    volume mélange les opacités, chaque groupe séparé en semi-transparent et opaque."""
     groups = [(False, solid)] if emissive is None else [(True, emissive), (False, solid & ~emissive)]
+    if tinted is not None:                                    # disjoints des émissifs (vérifié par Model)
+        groups = [(int(em) | (2 if t else 0), m & (tinted if t else ~tinted)) for em, m in groups for t in (True, False)]
+        groups = [(em, m) for em, m in groups if m.any()]
     return groups if opacity is None else [(em, m & o) for em, m in groups for o in opacity]
 
 
@@ -425,13 +435,15 @@ def optimize_model(model: Model, strategy: str = "auto") -> ModelExport:
     solid = vol.solid
     E = getattr(model, "emissive", None)
     E = None if E is None else (np.asarray(E, bool) & solid)
+    T = getattr(model, "tinted", None)
+    T = None if T is None else (np.asarray(T, bool) & solid)
     emission = getattr(model, "emission", 15)
     opacity = _opacity_groups(datas, solid)
     results = {}
     if strategy in ("auto", "boxes"):
         used = np.zeros(vol.shape, bool)
         boxes = []
-        for em, fil in _box_groups(solid, E, opacity):
+        for em, fil in _box_groups(solid, E, opacity, T):
             req = surface & fil
             if req.any():
                 joker = hidden if opacity is None else hidden & next(o for o in opacity if (o & fil).any())
@@ -439,10 +451,14 @@ def optimize_model(model: Model, strategy: str = "auto") -> ModelExport:
                 boxes += [(lo, hi, em) for lo, hi in b]
         results["boxes"] = _build(datas, vol, boxes, model.voxel_size, model.origin, emission)
     if strategy in ("auto", "palette"):
-        T = datas.shape[0]
-        vox = np.moveaxis(datas, 0, 3).reshape(vol.shape + (T * 4,))
+        nt = datas.shape[0]
+        vox = np.moveaxis(datas, 0, 3).reshape(vol.shape + (nt * 4,))
+        flags = np.zeros(vol.shape, np.uint8)                 # drapeaux de groupe : émissif (1), teinté (2)
         if E is not None:
-            vox = np.concatenate([vox, E[..., None].astype(np.uint8)], axis=-1)
+            flags |= E.astype(np.uint8)
+        if T is not None:
+            flags |= T.astype(np.uint8) * 2
+        vox = np.concatenate([vox, flags[..., None]], axis=-1)
         sel = solid.reshape(-1)
         flat = vox.reshape(-1, vox.shape[-1])
         keys, inv, counts = np.unique(flat[sel], axis=0, return_inverse=True, return_counts=True)
@@ -455,7 +471,7 @@ def optimize_model(model: Model, strategy: str = "auto") -> ModelExport:
             boxes = []
             for ci in np.argsort(-counts):
                 same = label == ci
-                em = bool(keys[ci][-1]) if E is not None else False
+                em = int(keys[ci][-1])
                 joker = hidden if opacity is None else hidden & next(o for o in opacity if (o & same).any())
                 boxes += [(lo, hi, em) for lo, hi in greedy_boxes(same & surface, same | joker, order, used)]
             if best is None or len(boxes) < len(best):
@@ -672,19 +688,45 @@ def glow_textures(block: Block) -> tuple[dict, dict]:
     return f2s, textures
 
 
+def tint_textures(block: Block) -> tuple[dict, dict]:
+    """Surcouche teintée d'un bloc (faces mixtes) : ({face: suffixe}, {suffixe: Sprite | Anim}), dédoublonnée."""
+    ov = block.tint_overlay_anims() if block.tint is not None else {}
+    groups: dict = {}
+    for f, t in ov.items():
+        groups.setdefault(_tex_key(t), []).append(f)
+    f2s, textures = {}, {}
+    for fs in groups.values():
+        suf = "" if len(groups) == 1 else "_" + "_".join(fs)
+        for f in fs:
+            f2s[f] = suf
+        textures[suf] = ov[fs[0]]
+    return f2s, textures
+
+
 def texture_name(name: str, suffix: str = "", layout: str = "flat") -> str:
     """Nom de texture d'un modèle : <nom><suffixe> (flat) ou <nom>/<suffixe sans _>, atlas si vide (folders)."""
     return f"{name}/{suffix.lstrip('_') or 'atlas'}" if layout == "folders" else f"{name}{suffix}"
 
 
 def cube_model_json(ns: str, name: str, face_to_suffix: dict, glow_to_suffix: dict | None = None,
-                    emission: int = 15, layout: str = "flat") -> dict:
+                    emission: int = 15, layout: str = "flat", tint_layout: dict | None = None,
+                    tint_to_suffix: dict | None = None) -> dict:
+    """Modèle d'un bloc plein. tint_layout {face: "all"} : tintindex sur la face ; tint_to_suffix {face: suffixe} :
+    surcouche teintée (pixels teintés seulement) sur les faces mixtes, comme le liseré de l'herbe vanilla."""
     tex = {f: f"{ns}:block/{texture_name(name, face_to_suffix[f], layout)}" for f in FACES}
     tex["particle"] = tex["north"]
-    elements = [{
-        "from": [0, 0, 0], "to": [16, 16, 16],
-        "faces": {f: {"uv": [0, 0, 16, 16], "texture": "#" + f, "cullface": f} for f in FACES},
-    }]
+    tint_layout = tint_layout or {}
+    faces = {f: {"uv": [0, 0, 16, 16], "texture": "#" + f, "cullface": f} for f in FACES}
+    for f, kind in tint_layout.items():
+        if kind == "all":
+            faces[f]["tintindex"] = 0
+    elements = [{"from": [0, 0, 0], "to": [16, 16, 16], "faces": faces}]
+    if tint_to_suffix:
+        tex.update({f"{f}_tint": f"{ns}:block/{texture_name(name, '_tint' + suf, layout)}"
+                    for f, suf in tint_to_suffix.items()})
+        elements.append({"from": [0, 0, 0], "to": [16, 16, 16],
+                         "faces": {f: {"uv": [0, 0, 16, 16], "texture": f"#{f}_tint", "tintindex": 0, "cullface": f}
+                                   for f in FACES if f in tint_to_suffix}})
     if glow_to_suffix:
         # surcouche aux mêmes coordonnées (comme le liseré de l'herbe vanilla), dessinée par-dessus,
         # pleinement éclairée : les pixels lumineux restent visibles dans le noir
@@ -806,7 +848,7 @@ class ResourcePack:
         """Modèle de bloc, dans les champs que lit la version visée (relu tel quel par la vérification)."""
         self._json(path, adapt_model(model, self.target))
 
-    def _item(self, ns: str, name: str, model_ref: str, display: dict | None = None) -> None:
+    def _item(self, ns: str, name: str, model_ref: str, display: dict | None = None, tint: str | None = None) -> None:
         """Ce qui affiche model_ref comme item <ns>:<name> : définition d'item (items/, 1.21.4+) ou modèle
         d'item (models/item/, 1.21.1 ; un item plat y a déjà son modèle item/generated). display : passe par
         un modèle models/item/<name>.json qui porte ce champ, dans les deux cibles."""
@@ -814,7 +856,10 @@ class ResourcePack:
             self._json(self._p(ns, "models", "item", f"{name}.json"), {"parent": model_ref, "display": display})
             model_ref = f"{ns}:item/{name}"
         if self.target.item_models:
-            self._json(self._p(ns, "items", f"{name}.json"), {"model": {"type": "minecraft:model", "model": model_ref}})
+            model = {"type": "minecraft:model", "model": model_ref}
+            if tint:
+                model["tints"] = [ITEM_TINTS[tint]]       # objet teinté comme son équivalent vanilla
+            self._json(self._p(ns, "items", f"{name}.json"), {"model": model})
         elif model_ref != f"{ns}:item/{name}":
             self._json(self._p(ns, "models", "item", f"{name}.json"), {"parent": model_ref})
 
@@ -911,9 +956,16 @@ class ResourcePack:
                                  "facing=south": {**m, "y": 180}, "facing=west": {**m, "y": 270}}}
         return {"variants": {"": m}}
 
-    def _block_common(self, name: str, model_ref: str, states: str | None = None) -> None:
+    def _block_common(self, name: str, model_ref: str, states: str | None = None, tint: str | None = None) -> None:
         self._json(self._p(self.ns, "blockstates", f"{name}.json"), self.variants(model_ref, states))
-        self._item(self.ns, name, model_ref)
+        self._item(self.ns, name, model_ref, tint=tint)
+
+    def _tint_warnings(self, asset) -> list:
+        """Une face à tintindex n'est colorée en jeu que si le bloc a une couleur enregistrée (mod) ; sinon grise."""
+        if getattr(asset, "tint", None) is None or self.mod_mode:
+            return []
+        return [f"teinte {asset.tint} : sans mod, le jeu n'applique la couleur du biome qu'à un bloc vanilla teinté "
+                f"(--replace sur {VANILLA_TINTED[asset.tint]}) ; ailleurs les voxels teintés restent gris"]
 
     def _light_warnings(self, what: str, n: int = 1) -> list:
         """1.21.1 : la lumière des éléments n'a pas d'équivalent vanilla, seul NeoForge la lit."""
@@ -929,11 +981,14 @@ class ResourcePack:
         g2s, glow = glow_textures(b)
         for suf, t in glow.items():
             self._block_texture(b.name, f"_glow{suf}", t)
-        model = cube_model_json(self.ns, b.name, f2s, g2s, b.emission, self.layout)
-        warnings = []
+        t2s, tov = tint_textures(b)
+        for suf, t in tov.items():
+            self._block_texture(b.name, f"_tint{suf}", t)
+        model = cube_model_json(self.ns, b.name, f2s, g2s, b.emission, self.layout, b.tint_layout(), t2s)
+        warnings = self._tint_warnings(b)
         rt = b.effective_render_type()
-        if glow and self.target.layers and rt == "solid":
-            rt = "cutout"                                # 1.21.1 : la surcouche n'est découpée qu'en cutout
+        if (glow or tov) and self.target.layers and rt == "solid":
+            rt = "cutout"                                # 1.21.1 : une surcouche n'est découpée qu'en cutout
         if glow and self.target.light == "neoforge_data":
             warnings += self._light_warnings("surcouche lumineuse")
         elif glow:
@@ -944,12 +999,13 @@ class ResourcePack:
             model["render_type"] = f"minecraft:{rt}"     # NeoForge ≤ 1.21.x ; en 26.x déduit des textures
         ref = f"{self.ns}:block/{b.name}"
         self._write_model(self._p(self.ns, "models", "block", f"{b.name}.json"), model)
-        self._block_common(b.name, ref, b.states)
-        diff = self._verify_ticks(ref, b, b.quads)
+        self._block_common(b.name, ref, b.states, tint=b.tint)
+        diff = self._verify_ticks(ref, b, b.quads, tint=b.tint)
         self._icon_from(b.quads(0))
-        n_anim = sum(isinstance(t, Anim) for t in list(textures.values()) + list(glow.values()))
+        n_anim = sum(isinstance(t, Anim) for t in list(textures.values()) + list(glow.values()) + list(tov.values()))
+        extra = {"tint": b.tint, "tint_faces": len(b.tint_layout())} if b.tint else {}
         return {"name": b.name, "kind": "bloc", "model": ref, "textures": len(textures), "elements": len(model["elements"]),
-                "glow_faces": len(g2s), "warnings": warnings,
+                "glow_faces": len(g2s), "warnings": warnings, **extra,
                 "verify": diff, "render_type": rt, "animated": n_anim,
                 "layout": "1 texture" if len(textures) == 1 else ", ".join(
                     sorted({s.strip("_") or "all" for s in f2s.values()}))}
@@ -976,7 +1032,11 @@ class ResourcePack:
                            {"textures": {"particle": source["textures"]["particle"]}})
         self._json(self._p(self.ns, "blockstates", f"{mp.name}.json"), mp.blockstate(self.ns))
         self._item(self.ns, mp.name, f"{self.ns}:block/{mp.item.name}", mp.item_display)
-        loader = ModelLoader([self.root], mc=self.target.mc)
+        kinds = sorted({m.tint for m in models if m.tint})
+        if len(kinds) > 1:
+            raise ExportError(f"{mp.name} : parties teintées de genres différents ({', '.join(kinds)}) : un bloc n'a "
+                              "qu'une couleur de biome")
+        loader = ModelLoader([self.root], mc=self.target.mc, tint=tint_color(kinds[0]) if kinds else None)
         diff = {"diff_px": sum(i["verify"]["diff_px"] for i in parts), "views": sum(i["verify"]["views"] for i in parts),
                 "missing": sorted({t for i in parts for t in i["verify"]["missing"]}), "ticks": 1}
         states = mp.states()
@@ -1075,6 +1135,7 @@ class ResourcePack:
                             "22,5° seulement) alors que le pack annonce 1.21.4+")
         n_light = sum(1 for e in elements if e.get("light_emission"))
         warnings += self._light_warnings(f"{n_light} élément(s) lumineux", n_light)
+        warnings += self._tint_warnings(m) if block else []
         model = {"parent": "minecraft:block/block", "textures": tex, "elements": elements}
         if not m.ambient_occlusion:
             model["ambientocclusion"] = False
@@ -1093,12 +1154,14 @@ class ResourcePack:
         ref = f"{self.ns}:block/{m.name}"
         self._write_model(self._p(self.ns, "models", "block", f"{m.name}.json"), model)
         if block:
-            self._block_common(m.name, ref, m.states)
-        diff = self._verify_ticks(ref, m, m.quads)
+            self._block_common(m.name, ref, m.states, tint=m.tint)
+        diff = self._verify_ticks(ref, m, m.quads, tint=m.tint)
         self._icon_from(m.quads(0))
         n_emit = sum(1 for e in opt.elements if e.get("light_emission"))
+        n_tint = sum(1 for e in opt.elements if any("tintindex" in fd for fd in e["faces"].values()))
         return {"name": m.name, "kind": "modèle", "model": ref, "elements": len(elements),
                 "voxel_elements": len(opt.elements), "planes": len(m.planes), "emissive_elements": n_emit,
+                **({"tint": m.tint, "tinted_elements": n_tint} if m.tint else {}),
                 "faces": opt.n_faces, "texture_size": opt.texture_size, "strategy": opt.strategy,
                 "alternatives": opt.alternatives, "verify": diff, "render_type": rt, "warnings": warnings,
                 "animated": int(opt.anim_atlas is not None) + sum(isinstance(t, Anim) and t.n > 1 for t in
@@ -1232,13 +1295,13 @@ class ResourcePack:
     # -------------------------------------------------------------- vérification
     def verify(self, model_ref: str | None, vol, offset=(0, 0, 0), voxel_size: float = 1.0,
                views=(INVENTORY, BACK, (135, 25), (315, -40), (0, 89.9), (90, 0)), quads=None,
-               tick: float = 0, night=()) -> dict:
+               tick: float = 0, night=(), tint: str | None = None) -> dict:
         """Relit le modèle et les PNG écrits sur disque (image affichée au tick `tick` pour une texture
         animée) comme la version visée les lit, les rend comme Minecraft, et compare au rendu de référence
         (le volume, ou une liste de quads) sous plusieurs angles en couleurs brutes, puis de nuit sous les
         angles `night` (shading 'emission' : lumière des éléments, ombrage oui/non, couche de rendu d'une
         surcouche). 0 pixel différent = export fidèle."""
-        loader = ModelLoader([self.root], tick=tick, mc=self.target.mc)
+        loader = ModelLoader([self.root], tick=tick, mc=self.target.mc, tint=tint_color(tint) if tint else None)
         qm = quads if quads is not None else loader.quads(model_ref)
         qv = vol if isinstance(vol, list) else quads_from_volume(vol, offset=offset, voxel_size=voxel_size)
         total = 0
@@ -1250,7 +1313,8 @@ class ResourcePack:
             total += n
         return {"diff_px": total, "views": len(views) + len(night), "missing": sorted(set(loader.missing))}
 
-    def _verify_ticks(self, model_ref, asset, ref_quads, disk_quads=None, max_ticks: int = 16) -> dict:
+    def _verify_ticks(self, model_ref, asset, ref_quads, disk_quads=None, max_ticks: int = 16,
+                      tint: str | None = None) -> dict:
         """verify() à chaque début d'image des animations de l'asset (6 vues + 2 de nuit au tick 0, 3 vues
         ensuite : la lumière et l'ombrage ne changent pas d'une image à l'autre)."""
         ticks = asset_ticks(asset, max_ticks)
@@ -1258,7 +1322,7 @@ class ResourcePack:
         for k, t in enumerate(ticks):
             views = (INVENTORY, BACK, (135, 25), (315, -40), (0, 89.9), (90, 0)) if k == 0 else \
                 (INVENTORY, BACK, (135, 25))
-            d = self.verify(model_ref, ref_quads(t), views=views, tick=t,
+            d = self.verify(model_ref, ref_quads(t), views=views, tick=t, tint=tint,
                             quads=disk_quads(t) if disk_quads else None, night=(INVENTORY, BACK) if k == 0 else ())
             out["diff_px"] += d["diff_px"]
             out["views"] += d["views"]

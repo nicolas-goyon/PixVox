@@ -10,6 +10,7 @@ import numpy as np
 
 from .anim import Anim, Timing, _check_frames
 from .sprite import Sprite
+from .tint import DEFAULT_BIOME, apply_tint, check_tint, tint_color
 from .volume import FACES, Volume, face_coords
 
 
@@ -154,12 +155,16 @@ class Block(Asset, _Animated):
                   change devient une texture animée ; les faces fixes restent des PNG simples.
     emissive    : masque des voxels lumineux (cristaux d'un minerai, runes) : exportés dans une
                   surcouche (light_emission = emission) qui reste claire dans le noir.
+    tint        : "grass", "foliage" ou "water" : voxels teintés par la couleur du biome (peints en gris) ;
+                  tinted = masque de ces voxels (tout le volume si absent : feuillages). Une face entièrement
+                  teintée porte tintindex ; une face mixte (côté d'un bloc d'herbe) reçoit une surcouche
+                  teintée, comme le liseré de l'herbe vanilla. Voir pixvox.tint.
     """
     kind = "cube"
 
     def __init__(self, name: str, volume, render_type: str | None = None, seamless=True,
                  states: str | None = None, notes: str = "", frametime: int = 2, interpolate: bool = False,
-                 order=None, emissive=None, emission: int = 15):
+                 order=None, emissive=None, emission: int = 15, tint: str | None = None, tinted=None):
         super().__init__(name, notes)
         self.seamless = seamless
         self.states = _check_states(states)
@@ -168,6 +173,9 @@ class Block(Asset, _Animated):
         volume = self.frames[0]
         self.emissive = _check_emissive(emissive, volume, emission)
         self.emission = int(emission)
+        self.tint, self.tinted = check_tint(tint, tinted, volume)
+        if self.tinted is not None and self.emissive is not None and (self.tinted & self.emissive).any():
+            raise ValueError(f"{name} : un voxel ne peut pas être à la fois teinté (tinted) et lumineux (emissive)")
         n = volume.shape[0]
         if volume.shape != (n, n, n) or n not in (8, 16, 32, 64, 128):
             raise ValueError(f"un Block est un cube de N³ voxels, N = 16 (vanilla), 32, 64… (reçu {volume.shape}) ;"
@@ -192,9 +200,10 @@ class Block(Asset, _Animated):
             given[f] = s if isinstance(s, Sprite) else (Sprite(data=np.asarray(s)) if isinstance(s, np.ndarray)
                                                         else Sprite.load(s))
         vol, conflicts = Volume.from_faces(given, resolve=resolve)
-        if kw.get("emissive") is not None:
-            raise ValueError("emissive n'est pas pris en charge avec from_faces (textures fournies) : "
-                             "construire le bloc depuis un volume")
+        for k in ("emissive", "tint"):
+            if kw.get(k) is not None:
+                raise ValueError(f"{k} n'est pas pris en charge avec from_faces (textures fournies) : "
+                                 "construire le bloc depuis un volume")
         b = cls(name, vol, **kw)
         b.conflicts = conflicts
         b.source = "faces"
@@ -259,10 +268,65 @@ class Block(Asset, _Animated):
             out[f] = seq[0] if same else Anim(seq, self.timing.frametime, self.timing.interpolate, self.timing.order)
         return out
 
-    def quads(self, tick: float = 0) -> list:
-        """Géométrie de rendu au tick donné (les 6 faces du cube, + surcouche lumineuse)."""
+    def tint_masks(self, vol=None) -> dict:
+        """{face: masque (h, w)} des pixels teintés de chaque face qui en a."""
+        if self.tinted is None:
+            return {}
+        vol = vol if vol is not None else self.volume
+        out = {}
+        for f in FACES:
+            X, Y, Z = face_coords(f, (0, 0, 0), vol.shape)
+            m = self.tinted[X, Y, Z] & vol.solid[X, Y, Z]
+            if m.any():
+                out[f] = m
+        return out
+
+    def tint_layout(self) -> dict:
+        """{face: "all" | "overlay"} : "all" si tous les pixels visibles de la face sont teintés (tintindex sur
+        la face), "overlay" si elle mélange pixels teintés et non teintés (surcouche teintée par-dessus)."""
+        out = {}
+        for f, m in self.tint_masks().items():
+            seen = np.any([fr.faces()[f].data[..., 3] > 0 for fr in self.frames], axis=0)
+            out[f] = "all" if not (seen & ~m).any() else "overlay"
+        return out
+
+    def tint_overlays(self, frame: int = 0, vol=None) -> dict:
+        """{face: Sprite} de la surcouche teintée des faces mixtes : pixels teintés (gris), le reste transparent."""
+        vol = vol if vol is not None else self.frames[frame % len(self.frames)]
+        out = {}
+        layout = self.tint_layout()
+        for f, m in self.tint_masks(vol).items():
+            if layout.get(f) == "overlay":
+                d = vol.faces()[f].data.copy()
+                d[~m, 3] = 0
+                out[f] = Sprite(data=d)
+        return out
+
+    def tint_overlay_anims(self) -> dict:
+        """{face: Sprite ou Anim} de la surcouche teintée."""
+        fr = [self.tint_overlays(k) for k in range(len(self.frames))]
+        out = {}
+        for f in fr[0]:
+            seq = [x[f] for x in fr]
+            same = all(np.array_equal(x.data, seq[0].data) for x in seq[1:])
+            out[f] = seq[0] if same else Anim(seq, self.timing.frametime, self.timing.interpolate, self.timing.order)
+        return out
+
+    def tinted_faces_at(self, tick: float = 0, biome: str | None = None) -> dict:
+        """Textures affichées au tick donné dans le biome (pixels teintés multipliés par sa couleur)."""
+        faces = self.faces_at(tick)
+        if self.tint is None:
+            return faces
+        color = tint_color(self.tint, biome or DEFAULT_BIOME)
+        vol = self.volume_at(tick)
+        return {f: (Sprite(data=apply_tint(s.data, color, m)) if (m := self.tint_masks(vol).get(f)) is not None else s)
+                for f, s in faces.items()}
+
+    def quads(self, tick: float = 0, biome: str | None = None) -> list:
+        """Géométrie de rendu au tick donné (les 6 faces du cube, + surcouche lumineuse), teinte du biome
+        (plaine par défaut) appliquée aux voxels teintés."""
         from .render import cube_quads
-        q = cube_quads(self.faces_at(tick))
+        q = cube_quads(self.tinted_faces_at(tick, biome))
         if self.emissive is not None:
             for gq in cube_quads(self.glow_faces(vol=self.volume_at(tick))):
                 gq.emission = self.emission
@@ -351,13 +415,15 @@ class Model(Asset, _Animated):
     emissive   : masque des voxels qui brillent (braises, yeux, cristaux) : exportés dans des éléments
                  à part avec light_emission = emission (0–15), visibles même dans le noir.
     Plans      : add_plane() / add_cross() ajoutent des plans texturés (flammes animées…).
+    tint       : "grass", "foliage" ou "water" + tinted = masque (tout le volume si absent) : voxels teintés par
+                 la couleur du biome (peints en gris), exportés dans des éléments à part avec tintindex.
     """
     kind = "model"
 
     def __init__(self, name: str, volume, voxel_size: float | None = None, origin=None,
                  ambient_occlusion: bool = True, states: str | None = None, inventory_scale: float | None = None,
                  inventory_center: bool = False, notes: str = "", frametime: int = 2, interpolate: bool = False,
-                 order=None, emissive=None, emission: int = 15):
+                 order=None, emissive=None, emission: int = 15, tint: str | None = None, tinted=None):
         super().__init__(name, notes)
         self.states = _check_states(states)
         self.inventory_scale = inventory_scale
@@ -369,6 +435,9 @@ class Model(Asset, _Animated):
         self.planes: list[Plane] = []
         self.emissive = _check_emissive(emissive, volume, emission)
         self.emission = int(emission)
+        self.tint, self.tinted = check_tint(tint, tinted, volume)
+        if self.tinted is not None and self.emissive is not None and (self.tinted & self.emissive).any():
+            raise ValueError(f"{name} : un voxel ne peut pas être à la fois teinté (tinted) et lumineux (emissive)")
         self.voxel_size = float(voxel_size) if voxel_size else 16.0 / volume.res   # unités modèle par voxel
         sx, sy, sz = volume.shape
         if origin is None:
@@ -409,10 +478,20 @@ class Model(Asset, _Animated):
             lo, hi = np.minimum(lo, a), np.maximum(hi, b)
         return lo, hi
 
-    def quads(self, tick: float = 0) -> list:
-        """Géométrie de rendu au tick donné : faces des voxels (+ émission) et plans texturés."""
+    def tinted_volume_at(self, tick: float = 0, biome: str | None = None):
+        """Volume affiché au tick donné, voxels teintés multipliés par la couleur du biome (plaine par défaut)."""
+        v = self.volume_at(tick)
+        if self.tint is None:
+            return v
+        v = v.copy()
+        v.data = apply_tint(v.data, tint_color(self.tint, biome or DEFAULT_BIOME), self.tinted)
+        return v
+
+    def quads(self, tick: float = 0, biome: str | None = None) -> list:
+        """Géométrie de rendu au tick donné : faces des voxels (+ émission) et plans texturés ; teinte du biome
+        (plaine par défaut) sur les voxels teintés."""
         from .render import plane_quads, quads_from_volume
-        q = quads_from_volume(self.volume_at(tick), offset=self.origin, voxel_size=self.voxel_size,
+        q = quads_from_volume(self.tinted_volume_at(tick, biome), offset=self.origin, voxel_size=self.voxel_size,
                               emissive=self.emissive, emission=self.emission, geometry=self.frames[0])
         for p in self.planes:
             q += plane_quads(p.center, p.y, p.width, p.height, p.angle, p.texture_at(tick), p.emission, p.shade)

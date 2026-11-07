@@ -1408,6 +1408,9 @@ def _write_project(assets, root: Path, final: Path, modid, name, pkg, names, *, 
         if isinstance(a, Multipart):
             raise ExportError(f"{a.name} : pixvox mod ne génère pas encore de Multipart ; l'exporter avec pixvox export "
                               "et enregistrer le bloc et ses propriétés dans le mod")
+        if getattr(a, "tint", None):
+            raise ExportError(f"{a.name} : pixvox mod n'enregistre pas encore la couleur de biome (tint={a.tint}) ; "
+                              "l'exporter avec pixvox export")
         if mc == "1.21.1":
             _check_props_1_21_1(a)
         infos.append(pack.add(a))           # ExportError si un modèle est invalide pour le jeu : pas de mod bancal

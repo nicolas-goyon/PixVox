@@ -31,6 +31,16 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; ve
   le jeu avec les mêmes valeurs. Géométrie des 263 états comparée aux blocs vanilla du jar 1.21.1 : identique
   (l'objet de la barrière garde ses traverses dans le bloc).
 - `ModelLoader.blockstate_quads` lit aussi les blockstates à variantes.
+- Teinte de biome (#23) : `tint="grass" | "foliage" | "water"` et `tinted=masque` (tout le volume sinon) sur
+  `Block` et `Model`, module `pixvox.tint` (couleurs de référence de 8 biomes, `apply_tint`). Les voxels teintés
+  se peignent en gris. Bloc : `tintindex` sur une face entièrement teintée, surcouche teintée (pixels teintés
+  seulement) sur une face mixte, comme le liseré de l'herbe vanilla (`render_type` cutout en 1.21.1). Modèle :
+  éléments teintés à part. Objet : `tints` de la définition d'item (1.21.4+), comme le bloc d'herbe et les
+  feuilles vanilla. `ModelLoader(tint=…)` applique la couleur aux faces à `tintindex` : la vérification
+  compare à la couleur de la plaine (et voit une teinte oubliée). Planche du bloc dans trois biomes, vues et
+  taille réelle teintées, analyse (voxels teintés gris et assez clairs), `pixvox view --biome`. JSON :
+  `details.tint`, `tint_faces` / `tinted_elements`. Sans mod, l'export rappelle que seul `--replace` sur un
+  bloc vanilla teinté affiche la couleur ; `pixvox mod` refuse pour l'instant (code 1), les variantes aussi.
 
 ## [0.2.0]
 
