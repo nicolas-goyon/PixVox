@@ -7,6 +7,15 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; ve
 
 ### Ajouté
 
+- Import de modèles (#26) : `pixvox import PACK ns:block/nom` (dossier, .zip ou le .jar du jeu) et `pixvox import
+  M.bbmodel` (Blockbench, textures incluses) écrivent un fichier d'asset éditable : volume en tranches ASCII (ou
+  `.npz` au-delà de la légende), plans en PNG. En Python : `import_model(…)` / `import_bbmodel(…)` →
+  `Imported.to_model()`, et `Volume.from_model(pack, ref, res=16)`. Voxelisation par projection sur les faces
+  lues par `pixvox.mcmodel` (UV, rotations, parents) : un modèle exporté par pixvox revient à 0 px (voxels,
+  plans, position), à 16 comme à 32 voxels par bloc. Élément d'épaisseur nulle → `add_plane` ; limites
+  signalées (grille, rotations non multiples de 90°, textures animées, plans horizontaux). Testé sur un jar
+  factice et, ici, sur le vrai jar 1.21.1 (lanterne, chaudron, coquelicot, feu de camp, entonnoir…) ; test
+  facultatif avec `PIXVOX_MC_JAR`.
 - Bibliothèque de matériaux (#27) : `pixvox.materials` — `planks(v, wood=…)` (12 essences, `WOODS`),
   `bricks(v)`, `cut_stone(v)`, `ore(v, crystal=…)` (renvoie le masque des cristaux), `metal(v, patina=…)`.
   Arguments par mot-clé, volumes de 16, 32 ou 64 voxels. Motifs à période qui divise 16 et bruit périodique :
@@ -19,6 +28,11 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; ve
   un import se voit). La planche est réécrite au même chemin ; une erreur est affichée sans arrêter la
   surveillance. `--view YAW,PITCH` / `--shading` ajoutent une vue libre, `--html` sert une page locale qui se
   recharge seule, `--json-lines` écrit un résultat JSON par passage, `--passes N` s'arrête après N passages.
+
+### Corrigé
+
+- Un `Model` fait seulement de plans (fleur, plante en croix) s'exporte : l'atlas vide et la boîte englobante
+  ne font plus échouer l'export.
 
 ## [0.3.0]
 

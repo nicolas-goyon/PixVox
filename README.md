@@ -37,6 +37,8 @@ construction.
 - **Variantes de construction** : `bloc.variants("slab", "stairs", "wall", …)` décline un bloc plein en
   dalle, escalier, mur, barrière, portillon, bouton et plaque de pression, avec ses textures (mêmes
   raccords) ; modèles et blockstates au format vanilla, chaque état relu et vérifié.
+- **Import** : un modèle JSON Minecraft (pack, .zip ou le .jar du jeu) ou Blockbench devient un volume
+  éditable (`pixvox import`) ; un modèle exporté par pixvox revient à l'identique (0 px).
 - **Matériaux prêts à l'emploi** : `planks`, `bricks`, `cut_stone`, `ore`, `metal` (`pixvox.materials`) peignent
   un bloc qui se raccorde sans couture ; `pixvox new mon_bloc --material bricks` part d'une recette.
 
@@ -121,6 +123,7 @@ ratée), `2` erreur d'utilisation ou d'environnement, `3` erreur interne.
 |---|---|
 | `pixvox new NOM --kind …` | fichier d'asset de départ |
 | `pixvox review F.py` | planche PNG + rapport (+ planche d'animation et GIF) |
+| `pixvox import PACK ns:block/nom` ou `pixvox import modele.bbmodel` | modèle JSON (dossier, .zip, .jar du jeu) ou Blockbench → fichier d'asset éditable |
 | `pixvox watch F.py [--html] [--view 135,20]` | planche refaite à chaque sauvegarde (et à chaque modification d'un module importé) |
 | `pixvox vanilla [--mc 26.3\|1.21.1]` | met en cache local les textures de blocs du jeu (une fois, avec réseau) : planche « dans le monde », écarts aux matériaux vanilla, `ramp_from_vanilla` |
 | `pixvox export F.py… --pack D --zip Z [--mc 1.21.1]` | resource pack vérifié (+ datapack de placement des multiblocs) ; `--mc 1.21.1` pour NeoForge 1.21.1 |

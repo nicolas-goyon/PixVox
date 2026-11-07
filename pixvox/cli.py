@@ -546,6 +546,36 @@ def cmd_watch(args, out) -> int:
     return EXIT_OK
 
 
+def cmd_import(args, out) -> int:
+    import re
+
+    from .importer import ModelImportError, import_bbmodel, import_model, write_asset
+    src = Path(args.source)
+    try:
+        if src.suffix.lower() == ".bbmodel":
+            imp = import_bbmodel(src, res=args.res, name=args.name)
+        else:
+            if not args.ref:
+                raise CliError("import d'un pack : donner le modèle, ex. pixvox import PACK ns:block/nom")
+            imp = import_model(src, args.ref, res=args.res, mc=args.mc, name=args.name)
+    except ModelImportError as e:
+        raise CliError(str(e), file=args.source) from e
+    name = args.name or imp.name
+    if not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", name):
+        raise CliError(f"nom {name!r} invalide : minuscules, chiffres et _ (--name pour le choisir)")
+    target = Path(args.out) if args.out else Path(f"{name}.py")
+    if target.exists() and not args.force:
+        raise CliError(f"{target} existe déjà (--force pour l'écraser)", file=str(target))
+    written = write_asset(imp, target, name)
+    say(f"{target} : {imp.volume.shape[0]}×{imp.volume.shape[1]}×{imp.volume.shape[2]} voxels, {len(imp.planes)} plan(s)"
+        + "".join(f"\n  ATTENTION {w}" for w in imp.warnings)
+        + f"\nEnsuite :\n  pixvox review {target.as_posix()}\n  pixvox export {target.as_posix()}")
+    out.update({"file": target, "files": written, "name": name, "shape": list(imp.volume.shape),
+                "voxel_size": imp.voxel_size, "origin": list(imp.origin), "planes": len(imp.planes),
+                "warnings": imp.warnings})
+    return EXIT_OK
+
+
 def cmd_vanilla(args, out) -> int:
     from . import vanilla as V
     try:
@@ -563,7 +593,8 @@ def cmd_vanilla(args, out) -> int:
 
 HANDLERS = {"review": cmd_review, "view": cmd_view, "anim": cmd_anim, "ascii": cmd_ascii, "export": cmd_export,
             "mod": cmd_mod, "compare": cmd_compare, "render-model": cmd_render_model, "new": cmd_new,
-            "doctor": cmd_doctor, "summary": cmd_summary, "vanilla": cmd_vanilla, "watch": cmd_watch}
+            "doctor": cmd_doctor, "summary": cmd_summary, "vanilla": cmd_vanilla, "watch": cmd_watch,
+            "import": cmd_import}
 
 
 # ============================================================================ analyse des arguments
@@ -600,6 +631,15 @@ def build_parser() -> argparse.ArgumentParser:
     w.add_argument("--json-lines", action="store_true", help="un résultat JSON par passage sur la sortie standard")
     w.add_argument("--passes", type=_positive, default=None, help="s'arrêter après N passages (scripts, tests)")
     w.add_argument("--interval", type=float, default=0.4, help="période de relevé en secondes (défaut : 0.4)")
+    im = add("import", "modèle JSON Minecraft (pack, .zip, .jar du jeu) ou Blockbench (.bbmodel) → fichier "
+                       "d'asset éditable")
+    im.add_argument("source", help="dossier de pack, .zip, .jar, ou fichier .bbmodel")
+    im.add_argument("ref", nargs="?", help="modèle à importer d'un pack : ns:block/nom")
+    im.add_argument("--out", help="fichier d'asset à écrire (défaut : <nom>.py)")
+    im.add_argument("--name", help="nom de l'asset (défaut : celui du modèle)")
+    im.add_argument("--res", type=_positive, default=16, help="voxels par bloc (défaut : 16 ; 32 pour plus fin)")
+    im.add_argument("--mc", default="1.21.4+", choices=MC_TARGETS, help="lire le modèle comme cette version")
+    im.add_argument("--force", action="store_true", help="écraser le fichier s'il existe")
     va = add("vanilla", "met en cache les textures de blocs d'une version de Minecraft (jar client de Mojang)")
     va.add_argument("--mc", default="26.3", help="version (défaut : 26.3 ; aussi 1.21.1)")
     va.add_argument("--force", action="store_true", help="retélécharger même si le cache existe")

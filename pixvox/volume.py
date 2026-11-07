@@ -737,6 +737,17 @@ class Volume:
             vol.data[:s.w, y, :s.h] = np.transpose(s.data, (1, 0, 2))
         return vol
 
+    @classmethod
+    def from_model(cls, pack, ref: str, res: int = 16, mc: str = "1.21.4+") -> Volume:
+        """Volume d'un modèle JSON Minecraft (« ns:block/nom ») d'un pack (dossier, .zip ou .jar du jeu),
+        voxelisé à `res` voxels par bloc. Les plans et les avertissements de l'import vont dans `log` ; pour
+        garder les plans et la position, utiliser pixvox.importer.import_model(…).to_model()."""
+        from .importer import import_model
+        imp = import_model(pack, ref, res=res, mc=mc)
+        if imp.planes:
+            imp.volume.log.append(f"import : {len(imp.planes)} plan(s) non gardés par Volume.from_model")
+        return imp.volume
+
     def to_slices_ascii(self) -> str:
         cols = self.colors()
         ordered = sorted(cols, key=lambda c: (lightness(c), c))

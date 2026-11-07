@@ -339,7 +339,7 @@ class ModelExport:
 
     @property
     def texture_size(self) -> int:
-        return max(a.size for a in (self.atlas, self.anim_atlas) if a is not None)
+        return max((a.size for a in (self.atlas, self.anim_atlas) if a is not None), default=0)   # 0 : que des plans
 
 
 def _stack(frames) -> np.ndarray:
@@ -486,7 +486,8 @@ def optimize_model(model: Model, strategy: str = "auto") -> ModelExport:
                 sub[...] = sub[:, vis][:, 0][:, None, None, None, :]
         results["palette"] = _build(datas2, vol, best, model.voxel_size, model.origin, emission)
     summary = {k: {"elements": len(v[0]), "faces": v[3],
-                   "texture": max(a.size for a in (v[1], v[2]) if a is not None)} for k, v in results.items()}
+                   "texture": max((a.size for a in (v[1], v[2]) if a is not None), default=0)}
+               for k, v in results.items()}
     if strategy == "auto" and len(results) == 2:
         a, b = summary["boxes"], summary["palette"]
         pick = "palette" if b["elements"] <= a["elements"] * 1.15 else "boxes"
