@@ -5,6 +5,7 @@ les modules, et un test ne doit dépendre que de ce qu'il teste.
 """
 from __future__ import annotations
 
+import os
 import sys
 import tempfile
 import unittest
@@ -14,6 +15,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:                      # tests lancés sans installer le paquet (skill, clone)
     sys.path.insert(0, str(ROOT))
+# cache vanilla vide et propre aux tests : le cache du développeur (pixvox vanilla) ne change aucun résultat
+os.environ["PIXVOX_CACHE"] = tempfile.mkdtemp(prefix="pixvox_test_cache_")
 
 VIEWS = ((225.0, 30.0), (45.0, -30.0), (135, 20), (315, -45), (0, 89.9), (90, -89.9))
 JITTER = (0.313, 0.227)                            # aucun centre de pixel pile sur une frontière de texel

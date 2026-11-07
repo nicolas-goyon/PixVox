@@ -173,7 +173,7 @@ def cmd_review(args, out) -> int:
     from .review import review_data
     entries = []
     for f, a in _load_many(args.files, args.only):
-        r = review_data(a, args.out)
+        r = review_data(a, args.out, neighbors=args.neighbors.split(",") if args.neighbors else None)
         say(r["report"])
         say(f"planche : {r['sheet']}")
         if r["anim"]:
@@ -495,9 +495,24 @@ def cmd_summary(args, out) -> int:
     return EXIT_OK
 
 
+def cmd_vanilla(args, out) -> int:
+    from . import vanilla as V
+    try:
+        info = V.fetch(args.mc, force=args.force, log=say)
+    except V.VanillaUnavailable as e:
+        raise CliError(str(e), type="environment") from e
+    except ValueError as e:
+        raise CliError(str(e)) from e
+    say(f"{info['textures']} textures de blocs {info['mc']} ({info.get('materials', '?')} matériaux) : {info['cache']}"
+        + ("" if info["downloaded"] else " (déjà en cache)"))
+    out.update({"mc": info["mc"], "cache": info["cache"], "textures": info["textures"],
+                "materials": info.get("materials"), "sha1": info["sha1"], "downloaded": info["downloaded"]})
+    return EXIT_OK
+
+
 HANDLERS = {"review": cmd_review, "view": cmd_view, "anim": cmd_anim, "ascii": cmd_ascii, "export": cmd_export,
             "mod": cmd_mod, "compare": cmd_compare, "render-model": cmd_render_model, "new": cmd_new,
-            "doctor": cmd_doctor, "summary": cmd_summary}
+            "doctor": cmd_doctor, "summary": cmd_summary, "vanilla": cmd_vanilla}
 
 
 # ============================================================================ analyse des arguments
@@ -521,6 +536,11 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--only", help=only_help)
     r.add_argument("--fail-on", default="never", choices=("never", "warn", "err"),
                    help="code de sortie 1 si l'analyse signale des alertes de ce niveau (défaut : never)")
+    r.add_argument("--neighbors", help="blocs vanilla à côté desquels juger l'asset (stone,oak_planks) ; il faut "
+                                       "les textures en cache (pixvox vanilla) ; défaut : les plus proches")
+    va = add("vanilla", "met en cache les textures de blocs d'une version de Minecraft (jar client de Mojang)")
+    va.add_argument("--mc", default="26.3", help="version (défaut : 26.3 ; aussi 1.21.1)")
+    va.add_argument("--force", action="store_true", help="retélécharger même si le cache existe")
     v = add("view", "rendu à un angle libre (blocs, modèles, items extrudés)")
     v.add_argument("file")
     v.add_argument("--yaw", type=float, default=225, help="rotation autour de y en degrés (225 = inventaire)")

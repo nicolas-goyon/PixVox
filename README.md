@@ -40,6 +40,10 @@ construction.
 - **Teinte de biome** : herbe, feuillages, eau (`tint="grass"`, masque `tinted` des voxels peints en gris) ;
   `tintindex` sur les faces entièrement teintées, surcouche teintée sur les faces mixtes (comme le liseré de
   l'herbe vanilla) ; planche dans trois biomes, vérification avec la couleur du biome.
+- **À côté des blocs du jeu** : `pixvox vanilla` met en cache les textures de blocs d'une version (jar de
+  Mojang, SHA-1 vérifié) ; la planche pose l'asset entre deux blocs vanilla, l'analyse dit s'il est plus clair
+  ou plus saturé que la pierre (ou les voisins choisis, `--neighbors`), `ramp_from_vanilla("stone")` part
+  d'une palette du jeu.
 - **Planches de revue** : inventaire, dessous en perspective, monde 3×3×3, nuit, taille réelle, patron
   des textures, analyse (raccords, palette, boucle d'animation…), GIF.
 - **Export vérifié** : chaque modèle et chaque texture écrits sur disque sont relus et rendus comme le
@@ -112,6 +116,7 @@ ratée), `2` erreur d'utilisation ou d'environnement, `3` erreur interne.
 |---|---|
 | `pixvox new NOM --kind …` | fichier d'asset de départ |
 | `pixvox review F.py` | planche PNG + rapport (+ planche d'animation et GIF) |
+| `pixvox vanilla [--mc 26.3\|1.21.1]` | met en cache local les textures de blocs du jeu (une fois, avec réseau) : planche « dans le monde », écarts aux matériaux vanilla, `ramp_from_vanilla` |
 | `pixvox export F.py… --pack D --zip Z [--mc 1.21.1]` | resource pack vérifié (+ datapack de placement des multiblocs) ; `--mc 1.21.1` pour NeoForge 1.21.1 |
 | `pixvox mod F.py… --modid ID [--loader neoforge] --build` | projet de mod + `.jar` |
 | `pixvox view F.py --yaw 135 --pitch 20 [--persp 2] [--shading night] [--tick 6] [--biome swamp]` | angle libre |
@@ -156,6 +161,8 @@ ratée), `2` erreur d'utilisation ou d'environnement, `3` erreur interne.
   translucides se croisent, l'image en jeu peut différer de la planche ; la vérification ne compare pas ce tri.
   Un `Block` n'a que sa peau : un cœur opaque dans un cube de verre ne s'exporte pas (utiliser `Model`).
 - L'ombrage d'inventaire est une approximation fidèle, pas le rendu OpenGL du jeu.
+- Textures vanilla : propriété de Mojang. `pixvox vanilla` les garde dans un cache local (`$PIXVOX_CACHE`, sinon
+  le cache de l'utilisateur), jamais dans le dépôt, un pack ou un mod ; seules les planches locales les montrent.
 - pixvox ne lance jamais Minecraft : tester en jeu reste une étape humaine.
 
 ## Contribuer

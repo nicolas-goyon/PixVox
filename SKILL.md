@@ -91,6 +91,7 @@ ou environnement / 3 interne (contrat : `docs/cli.md`). `python -m pixvox summar
 | même objet à plusieurs tailles / finesses | décrire en unités de conception : `Volume.design(extent, res=, scale=)` |
 | animation (feu, lave, braises, runes) | liste de volumes (`v.frames(n)` + `pulse` / `flow`), `fire()` + `add_cross` |
 | herbe, feuillages, eau (couleur du biome) | `tint="grass" \| "foliage" \| "water"` (+ `tinted=masque`, tout le volume sinon) sur Block / Model, voxels peints en gris |
+| juger un bloc à côté des blocs du jeu, partir d'une palette vanilla | `pixvox vanilla` (une fois) puis `pixvox review … [--neighbors stone,oak_planks]` ; `ramp_from_vanilla("stone")` |
 | partie qui brille la nuit | `emissive=masque, emission=12` sur Block / Model / MultiBlock ; plans `emission=15` |
 | vrai bloc (lumière, collision, particules) | `asset.props = Props(...)` puis `export_mod` |
 | petit modèle perdu / trop grand dans la case | `Model(…, inventory_scale=1.6 ou 0.8, inventory_center=True)` |
@@ -237,6 +238,7 @@ Multipart("tableau", [Part(base, {"column": 1}),                  # une valeur, 
           facing=True, item=complet, item_display={...})         # item : modèle de l'objet en main
 Block(…, tint="grass" | "foliage" | "water", tinted=masque)   Model(…, tint=…, tinted=…)
                                               # voxels teintés en gris ; b.quads(tick, biome="swamp")
+ramp_from_vanilla("stone", n=5, mc=None)      # palette tirée d'une texture du jeu (cache : pixvox vanilla)
 bloc.variants(*shapes, names={"wall": "…"})   # [Variant] ; shapes parmi SHAPES : slab, stairs, wall, fence,
                                               # fence_gate, button, pressure_plate ; noms <bloc>_<variante>
 export_pack([...], root="out/pack", namespace="pixvox", zip_path=None, replace={"nom": "minecraft:stone"},
@@ -261,6 +263,11 @@ perlin(shape, cells=4, seed=0, octaves=1)   # shape 2D, 3D… ou 4D (x, y, z, te
   (plaine, marais, désert) ; `pixvox view … --biome jungle` pour un autre. Exemples : `meadow_grass.py`,
   `willow_leaves.py`. `pixvox mod` enregistre la couleur du biome côté client ; sans mod, elle n'apparaît en
   jeu que par `--replace` sur `minecraft:grass_block` / `oak_leaves` (alerte de l'export).
+- **À côté du vanilla** : `pixvox vanilla` (une fois, réseau) puis `pixvox review` : la planche ajoute une rangée où
+  l'asset est posé entre deux blocs du jeu (ses matériaux les plus proches, ou `--neighbors`), et l'analyse
+  chiffre l'écart (« 50 % plus saturé que stone »). Un minerai doit rester proche de sa roche hors cristaux ;
+  partir de `ramp_from_vanilla("stone")` pour la roche. Sans cache, rien ne change (aucun téléchargement).
+  Ne jamais copier ces textures dans `examples/` ni dans un livrable (droits de Mojang).
 - **Famille de construction** : `pierre.variants()` sur un bloc qui se raccorde (`seamless=True` ou
   `"horizontal"`). Chaque élément montre la peau du bloc plein à cet endroit, dans la direction où il
   regarde : la dalle du bas montre le bas des côtés, la marche le haut (coulures de mousse comprises), et un
