@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "pixvox": {
+      "command": "pixvox",
+      "args": ["mcp"]
+    }
+  }
+}

@@ -1,4 +1,4 @@
-# Intégrer pixvox ailleurs : action GitHub, Docker, autres CI, Python
+# Intégrer pixvox ailleurs : action GitHub, Docker, autres CI, Python, serveur MCP
 
 pixvox est utilisable sans agent : tout passe par la commande `pixvox` (contrat JSON et codes de
 sortie dans [cli.md](cli.md)). Cette page montre les intégrations prêtes à l'emploi.
@@ -118,6 +118,38 @@ assert all(verified(i) for i in infos)
 code, result = run(["review", "assets/ore.py", "--json"])
 ```
 
+## Serveur MCP (Claude Code, Claude Desktop, Cursor…)
+
+`pixvox mcp` expose six outils à tout agent compatible MCP : `review`, `view`, `export`, `mod`,
+`render_model`, `doctor`. Chacun prend les mêmes paramètres que la commande du même nom et renvoie le
+même document JSON que `--json` (contrat : [`cli.md`](cli.md)), **suivi des images** produites (planches de
+revue, planches d'animation, vues) : l'agent regarde la planche dans la conversation avant de juger
+l'asset. `is_error` est vrai quand le code de sortie n'est pas 0 (export non vérifié, fichier introuvable).
+Aucun outil ne lance Minecraft ; `mod` avec `build: true` compile le mod et son test JUnit seulement.
+
+```bash
+pip install "pixvox[mcp] @ git+https://github.com/nicolas-goyon/PixVox@v0"   # le cœur reste numpy + Pillow
+pixvox mcp                                    # serveur stdio (le journal va sur la sortie d'erreur)
+```
+
+Les chemins des outils sont relatifs au dossier où le client démarre le serveur : le projet, pour Claude
+Code ; pour Claude Desktop, donner des chemins absolus (ou `cwd` si le client le permet).
+
+- **Claude Code** : le plugin pixvox (`/plugin install pixvox@pixvox`, voir plus bas) déclare le serveur
+  dans `claude-plugin/.mcp.json` ; il démarre `pixvox mcp`, donc `pixvox[mcp]` doit être installé et sur le
+  `PATH`. Sans le plugin : `claude mcp add --transport stdio pixvox -- pixvox mcp` (ajouter `--scope project`
+  avant `--` pour le partager avec le dépôt dans `.mcp.json`).
+- **Claude Desktop** : dans `claude_desktop_config.json` (*Settings → Developer → Edit Config*) :
+
+  ```json
+  {"mcpServers": {"pixvox": {"command": "/chemin/absolu/vers/pixvox", "args": ["mcp"]}}}
+  ```
+
+  Chemin absolu de préférence (`which pixvox`, `where pixvox` sous Windows) : une application graphique ne
+  voit pas toujours le `PATH` du terminal. Redémarrer Claude Desktop.
+- **Cursor** : même bloc `mcpServers` dans `.cursor/mcp.json` (projet) ou `~/.cursor/mcp.json`.
+- **Autre client** : commande `pixvox`, argument `mcp`, transport stdio.
+
 ## Agents
 
 - **Claude (claude.ai)** : téléverser `pixvox_skill.zip` (fichier de chaque release) dans
@@ -125,7 +157,8 @@ code, result = run(["review", "assets/ore.py", "--json"])
   code doit être activée. Le zip contient un dossier `pixvox/` avec `SKILL.md`, le paquet et les exemples.
 - **Claude Code, dans n'importe quel projet** : `/plugin marketplace add nicolas-goyon/PixVox` puis
   `/plugin install pixvox@pixvox` (en ligne de commande : `claude plugin marketplace add …` et
-  `claude plugin install pixvox@pixvox`). Le skill installe pixvox avec pip à la première utilisation.
+  `claude plugin install pixvox@pixvox`). Le skill installe pixvox avec pip à la première utilisation ; le
+  plugin déclare aussi le serveur MCP (section précédente), actif une fois `pixvox[mcp]` installé.
 - **Claude Code et autres agents de code, dans ce dépôt** : les consignes sont dans
   [`AGENTS.md`](../AGENTS.md) (importé par `CLAUDE.md`) et le skill de projet `.claude/skills/pixvox` se
   charge tout seul. Un agent qui contribue un asset ouvre une PR : la CI rend les planches, vérifie

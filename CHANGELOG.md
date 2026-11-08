@@ -5,6 +5,16 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; ve
 
 ## [Non publié]
 
+### Ajouté
+
+- Serveur MCP (#28) : `pixvox mcp` (stdio), outils `review`, `view`, `export`, `mod`, `render_model`, `doctor`.
+  Mêmes paramètres et même document JSON que `--json`, suivi des images produites (planches, vues) ;
+  `is_error` quand le code de sortie n'est pas 0. Aucun outil ne lance Minecraft. Dépendance optionnelle
+  `pip install "pixvox[mcp]"` (SDK `mcp` 2.x) : sans elle, le cœur reste numpy + Pillow et `pixvox mcp` sort
+  en code 2. Le plugin Claude Code déclare le serveur (`claude-plugin/.mcp.json`) ; configuration Claude
+  Desktop, Claude Code et Cursor dans `docs/integration.md`. Tests : chaque outil par un client MCP en
+  mémoire, et un vrai serveur stdio en sous-processus (protocole jamais pollué par le journal).
+
 ## [0.4.0]
 
 ### Ajouté

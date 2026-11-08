@@ -28,6 +28,7 @@ python -m pixvox …        # équivalent, utile sans installation (depuis un cl
 | `pixvox ascii F.py [--face up\|…]` | pixels exacts en texte | (sortie standard) |
 | `pixvox render-model PACK ns:block/nom [--out IMG] [--mc 1.21.4+\|1.21.1]` | aperçu d'un modèle JSON quelconque (pack fait main, Blockbench…), lu comme la version choisie | `IMG` |
 | `pixvox vanilla [--mc 26.3\|1.21.1] [--force]` | met en cache les textures de blocs du jeu (jar client de Mojang, SHA-1 vérifié) | cache local (`$PIXVOX_CACHE/vanilla/<mc>`) |
+| `pixvox mcp` | serveur MCP sur stdio : outils `review`, `view`, `export`, `mod`, `render_model`, `doctor` (même contrat que `--json`, images en plus) ; paquet optionnel `pixvox[mcp]`, sinon code 2 | — |
 | `pixvox doctor [--java-home J]` | Python, dépendances, JDK, export de test | — |
 | `pixvox summary RESULT.json [--format markdown\|text]` | résumé lisible d'un résultat `--json` | (sortie standard) |
 

@@ -576,6 +576,19 @@ def cmd_import(args, out) -> int:
     return EXIT_OK
 
 
+def cmd_mcp(args, out) -> int:
+    if args.json:
+        raise CliError("mcp : le serveur parle sur stdin / stdout ; --json ne s'applique pas")
+    try:
+        from .mcp_server import build_server
+        srv = build_server()
+    except ImportError as e:
+        raise CliError(str(e), type="environment") from e
+    say(f"pixvox {__version__} : serveur MCP sur stdio (Ctrl+C pour arrêter)", file=sys.stderr)
+    srv.run("stdio")
+    return EXIT_OK
+
+
 def cmd_vanilla(args, out) -> int:
     from . import vanilla as V
     try:
@@ -594,7 +607,7 @@ def cmd_vanilla(args, out) -> int:
 HANDLERS = {"review": cmd_review, "view": cmd_view, "anim": cmd_anim, "ascii": cmd_ascii, "export": cmd_export,
             "mod": cmd_mod, "compare": cmd_compare, "render-model": cmd_render_model, "new": cmd_new,
             "doctor": cmd_doctor, "summary": cmd_summary, "vanilla": cmd_vanilla, "watch": cmd_watch,
-            "import": cmd_import}
+            "import": cmd_import, "mcp": cmd_mcp}
 
 
 # ============================================================================ analyse des arguments
@@ -640,6 +653,7 @@ def build_parser() -> argparse.ArgumentParser:
     im.add_argument("--res", type=_positive, default=16, help="voxels par bloc (défaut : 16 ; 32 pour plus fin)")
     im.add_argument("--mc", default="1.21.4+", choices=MC_TARGETS, help="lire le modèle comme cette version")
     im.add_argument("--force", action="store_true", help="écraser le fichier s'il existe")
+    add("mcp", "serveur MCP (stdio) : review, view, export, mod, render_model, doctor pour un agent (pixvox[mcp])")
     va = add("vanilla", "met en cache les textures de blocs d'une version de Minecraft (jar client de Mojang)")
     va.add_argument("--mc", default="26.3", help="version (défaut : 26.3 ; aussi 1.21.1)")
     va.add_argument("--force", action="store_true", help="retélécharger même si le cache existe")
