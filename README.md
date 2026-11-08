@@ -110,6 +110,7 @@ Fabric).
 | consignes pour travailler sur le dépôt | [`AGENTS.md`](AGENTS.md) (lu par Claude Code via `CLAUDE.md`) |
 | skill pour Claude (claude.ai) | `pixvox_skill.zip` de chaque [release](https://github.com/nicolas-goyon/PixVox/releases), mode d'emploi [`SKILL.md`](SKILL.md) |
 | skill pour Claude Code, dans n'importe quel projet | `/plugin marketplace add nicolas-goyon/PixVox` puis `/plugin install pixvox@pixvox` |
+| serveur MCP (Claude Code, Claude Desktop, Cursor…) | `pip install "pixvox[mcp] @ git+…"` puis `pixvox mcp` ; outils `review`, `view`, `export`, `mod`, `render_model`, `doctor`, planches renvoyées comme images ([intégration](docs/integration.md#serveur-mcp-claude-code-claude-desktop-cursor)) |
 | résultat exploitable sans lire du texte | `--json` sur toutes les commandes : [contrat et codes de sortie](docs/cli.md) |
 | CI d'un autre dépôt | action `uses: nicolas-goyon/PixVox@main` (ou un tag de version) : [intégration](docs/integration.md) |
 | sans Python sur la machine | image Docker `ghcr.io/nicolas-goyon/pixvox` |

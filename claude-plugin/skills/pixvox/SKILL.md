@@ -92,6 +92,7 @@ ou environnement / 3 interne (contrat : `docs/cli.md`). `python -m pixvox summar
 | retoucher un modèle existant (JSON d'un pack, du jeu, Blockbench) | `pixvox import PACK ns:block/nom --out f.py` (ou `.bbmodel`) puis retoucher le volume ; `import_model(…).to_model()` en Python |
 | planches, briques, pierre de taille, minerai, métal | `pixvox.materials` : `planks(v, wood=…)`, `bricks(v)`, `cut_stone(v)`, `glow = ore(v, crystal=…)`, `metal(v, patina=…)` ; `pixvox new NOM --material bricks` |
 | herbe, feuillages, eau (couleur du biome) | `tint="grass" \| "foliage" \| "water"` (+ `tinted=masque`, tout le volume sinon) sur Block / Model, voxels peints en gris |
+| piloter pixvox depuis un client MCP (Claude Desktop, Cursor…) | `pixvox mcp` (paquet `pixvox[mcp]`) : outils typés, planches renvoyées comme images ; docs/integration.md |
 | itérer à la main sur un asset (humain) | `pixvox watch F.py --html` : planche refaite à chaque sauvegarde ; un agent garde `pixvox review` |
 | juger un bloc à côté des blocs du jeu, partir d'une palette vanilla | `pixvox vanilla` (une fois) puis `pixvox review … [--neighbors stone,oak_planks]` ; `ramp_from_vanilla("stone")` |
 | partie qui brille la nuit | `emissive=masque, emission=12` sur Block / Model / MultiBlock ; plans `emission=15` |

@@ -31,7 +31,8 @@ classifiers = [
 dependencies = ["numpy>=1.24", "pillow>=10.0"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6", "pyyaml>=6"]
+dev = ["pytest>=8", "ruff>=0.6", "pyyaml>=6", "mcp>=2.3,<3"]
+mcp = ["mcp>=2.3,<3"]
 
 [project.scripts]
 pixvox = "pixvox.cli:main"
