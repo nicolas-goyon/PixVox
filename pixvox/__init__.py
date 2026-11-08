@@ -33,7 +33,7 @@ from .vanilla import ramp_from_vanilla
 from .variants import SHAPES, Variant
 from .volume import FACE_AXES, FACES, NORMALS, Volume, face_coords
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 
 def review(asset, out_dir="out", show_report=True):

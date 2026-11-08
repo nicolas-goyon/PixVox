@@ -5,6 +5,8 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; ve
 
 ## [Non publié]
 
+## [0.5.0]
+
 ### Ajouté
 
 - Serveur MCP (#28) : `pixvox mcp` (stdio), outils `review`, `view`, `export`, `mod`, `render_model`, `doctor`.
