@@ -84,7 +84,7 @@ def fetch(mc: str = DEFAULT_MC, *, force: bool = False, manifest_url: str | None
     """Télécharge (si besoin) le jar client de `mc`, vérifie son SHA-1 et met en cache ses textures de blocs.
     Renvoie {mc, cache, textures, sha1, downloaded}. VanillaUnavailable si le réseau ou la version manque."""
     d = cache_dir(mc)
-    if available(mc) and not force:
+    if available(mc) and (d / "ids.json").is_file() and not force:       # cache d'avant 0.5.1 : complété
         meta = json.loads((d / "meta.json").read_text(encoding="utf-8"))
         return {**meta, "cache": d, "downloaded": False}
     say = log or (lambda *_: None)
@@ -111,6 +111,7 @@ def fetch(mc: str = DEFAULT_MC, *, force: bool = False, manifest_url: str | None
         out.mkdir()
         n = 0
         materials = set()
+        ids = {"blocks": set(), "items": set()}
         with zipfile.ZipFile(_bytes_file(tmp, data)) as z:
             for name in z.namelist():
                 if name.startswith(_PREFIX) and name.endswith(".png") and "/" not in name[len(_PREFIX):]:
@@ -118,11 +119,16 @@ def fetch(mc: str = DEFAULT_MC, *, force: bool = False, manifest_url: str | None
                     n += 1
                 elif name.startswith(_MODELS) and name.endswith(".json"):
                     materials |= _cube_textures(z.read(name))
+                for kind, prefix in (("blocks", "assets/minecraft/blockstates/"), ("items", "assets/minecraft/items/"),
+                                     ("items", "assets/minecraft/models/item/")):      # items/ : 1.21.4+ ; 1.21.1
+                    if name.startswith(prefix) and name.endswith(".json") and "/" not in name[len(prefix):]:
+                        ids[kind].add(Path(name).stem)
         if not n:
             raise VanillaUnavailable(f"aucune texture de bloc dans le jar client {mc}")
         materials = sorted(m for m in materials if (out / f"{m}.png").is_file() and not _TINTED_GREY.search(m))
         meta = {"mc": mc, "sha1": sha1, "textures": n, "materials": len(materials), "source": client["url"]}
         (tmp / "materials.txt").write_text("\n".join(materials) + "\n", encoding="utf-8")
+        (tmp / "ids.json").write_text(json.dumps({k: sorted(v) for k, v in ids.items()}) + "\n", encoding="utf-8")
         (tmp / "meta.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
         (tmp / "jar").unlink()
         if d.exists():
@@ -204,6 +210,17 @@ def ramp_from_vanilla(name: str, n: int = 5, mc: str | None = None) -> Ramp:
             idx[i] = min(idx[i - 1] + 1, len(cols) - 1)
     picks = [cols[i] for i in dict.fromkeys(idx)]
     return Ramp([tuple(int(x) for x in c[:3]) + (255,) for c in picks])
+
+
+def known_ids(mc: str | None = None):
+    """{"mc", "blocks", "items"} : identifiants (sans « minecraft: ») des blocs et des items du jar en cache ;
+    None si le cache n'a pas cette liste (fait avant pixvox 0.5.1 : relancer `pixvox vanilla`)."""
+    mc = _require(mc)
+    f = cache_dir(mc) / "ids.json"
+    if not f.is_file():
+        return None
+    d = json.loads(f.read_text(encoding="utf-8"))
+    return {"mc": mc, "blocks": set(d["blocks"]), "items": set(d["items"])}
 
 
 def materials(mc: str | None = None) -> list:

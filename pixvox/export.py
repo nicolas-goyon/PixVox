@@ -1280,6 +1280,12 @@ class ResourcePack:
             raise ExportError(f"{asset.name} : --replace ne s'applique pas à un MultiBlock (plusieurs blocs) ; "
                               "utiliser le datapack de placement, ou un mod (python -m pixvox mod …)")
         t = target.split(":", 1)[-1]
+        known = _vanilla_ids(self.target.mc)
+        kind = "items" if isinstance(asset, Item) else "blocks"
+        if known is not None and t not in known[kind]:
+            info.setdefault("warnings", []).append(
+                f"--replace : minecraft:{t} n'est pas un {'item' if kind == 'items' else 'bloc'} de Minecraft "
+                f"{known['mc']} (cache vanilla) : en jeu, rien ne sera remplacé ; vérifier l'identifiant")
         if isinstance(asset, Item):
             self._item("minecraft", t, info["model"])
             return f"item minecraft:{t} -> {info['model']}"
@@ -1453,6 +1459,43 @@ def export_line(info: dict) -> str:
             f"{status}" + (f" | {info['replace']}" if "replace" in info else ""))
 
 
+VANILLA_ID_RE = re.compile(r"[a-z0-9_.-]+")
+
+
+def check_replacements(replace, names) -> dict:
+    """Contrôle `replace` ({nom d'asset: "minecraft:bloc"}) avant tout export : nom d'asset connu, identifiant
+    valide de l'espace `minecraft` (le seul que --replace remplace), un seul asset par bloc vanilla. Renvoie le
+    dictionnaire normalisé ({nom: "minecraft:bloc"}) ; ExportError sinon (code 2 en ligne de commande)."""
+    out, owner = {}, {}
+    names = list(names)
+    for name, target in (replace or {}).items():
+        if name not in names:
+            raise ExportError(f"--replace {name}=… : aucun asset nommé {name!r} (assets : {', '.join(names) or 'aucun'})")
+        ns, _, path = str(target).strip().rpartition(":")
+        if ns not in ("", "minecraft"):
+            raise ExportError(f"--replace {name}={target} : seul un bloc ou un item de Minecraft (minecraft:…) peut être "
+                              f"remplacé ; « {ns} » est un autre espace de noms")
+        if not VANILLA_ID_RE.fullmatch(path):
+            raise ExportError(f"--replace {name}={target!r} : identifiant invalide (minuscules, chiffres, _ . - ; "
+                              "ex. minecraft:stone)")
+        ident = f"minecraft:{path}"
+        if ident in owner:
+            raise ExportError(f"--replace : {owner[ident]} et {name} visent tous deux {ident} (le second écraserait le "
+                              "premier)")
+        owner[ident] = name
+        out[name] = ident
+    return out
+
+
+def _vanilla_ids(mc: str):
+    """Blocs et items du jeu (cache de `pixvox vanilla`) pour la version visée, ou None sans cache : jamais de
+    téléchargement ici. 1.21.1 : cache 1.21.1 ; sinon, n'importe quelle autre version en cache."""
+    from . import vanilla as V
+    prefer = ("1.21.1",) if mc == "1.21.1" else tuple(v for v in V.VERSIONS if v != "1.21.1")
+    ver = V.cached_version(prefer)
+    return V.known_ids(ver) if ver else None
+
+
 def export_assets(assets, root="out/pack", namespace: str = "pixvox", zip_path=None, replace=None,
                   description: str = "Créé avec pixvox", log=say, mc: str | None = None, textures: str = "flat") -> dict:
     """Écrit un resource pack (recréé) et vérifie chaque asset par re-rendu, sans s'arrêter au premier refus.
@@ -1469,6 +1512,7 @@ def export_assets(assets, root="out/pack", namespace: str = "pixvox", zip_path=N
     t = target(mc)                                   # ValueError si inconnu, avant de toucher au disque
     if textures not in TEXTURE_LAYOUTS:
         raise ValueError(f"textures={textures!r} inconnu : {', '.join(TEXTURE_LAYOUTS)}")
+    replace = check_replacements(replace, [a.name for a in assets])     # avant de toucher au disque
     root = prepare_output_dir(root, "dossier du pack")
     mark_output_dir(root)
     pack = ResourcePack(root, namespace, description, mc=t.mc, textures=textures)

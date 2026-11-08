@@ -55,6 +55,10 @@ def _fake_jar() -> bytes:
             "top": "block/grass_block_top", "side": "block/stone", "bottom": "block/stone"}}))
         z.writestr(m + "red_bed.json", json.dumps({"parent": "block/bed", "textures": {"bed": "block/red_bed_head"}}))
         z.writestr("data/minecraft/recipe/x.json", "{}")
+        for b in ("stone", "oak_planks", "oak_log"):                                  # blocs et items du jeu
+            z.writestr(f"assets/minecraft/blockstates/{b}.json", "{}")
+            z.writestr(f"assets/minecraft/items/{b}.json", "{}")
+        z.writestr("assets/minecraft/items/paper.json", "{}")
     return buf.getvalue()
 
 
@@ -208,3 +212,34 @@ def test_mojang_manifest_lists_pixvox_versions():
     ids = {v["id"]: v["url"] for v in manifest["versions"]}
     for mc in V.VERSIONS:
         assert mc in ids, mc
+
+
+def test_cache_keeps_block_and_item_ids_and_replace_warns_on_unknown_ones():
+    """#56 : le cache garde la liste des blocs et des items du jar ; --replace vers un bloc inconnu du jeu
+    (faute de frappe, ou identifiant d'item pour un bloc) ajoute une alerte. Un cache plus ancien, sans cette
+    liste, est complété par `pixvox vanilla` sans --force."""
+    from pixvox import Block, Item, Sprite, Volume
+    from pixvox import vanilla as V
+    from pixvox.export import export_assets
+    jar = _fake_jar()
+    with tmpdir() as tmp, cache_in(tmp / "cache"):
+        with fake_mojang(jar) as url:
+            V.fetch("26.3", manifest_url=url)
+            ids = V.known_ids("26.3")
+            assert ids["blocks"] == {"stone", "oak_planks", "oak_log"} and "paper" in ids["items"]
+            (V.cache_dir("26.3") / "ids.json").unlink()                     # cache d'avant 0.5.1
+            assert V.known_ids("26.3") is None
+            assert V.fetch("26.3", manifest_url=url)["downloaded"]          # complété sans --force
+            assert V.known_ids("26.3") is not None
+        b, it = Block("bloc_r", Volume(16, fill="#808080")), Item("item_r", Sprite(16))
+        res = export_assets([b, it], tmp / "p1", replace={"bloc_r": "minecraft:stonee", "item_r": "minecraft:paper"},
+                            log=None)
+        warns = {i["name"]: i.get("warnings", []) for i in res["infos"]}
+        assert any("minecraft:stonee n'est pas un bloc" in w for w in warns["bloc_r"])
+        assert not any("--replace" in w for w in warns["item_r"])          # paper est bien un item
+        res = export_assets([b], tmp / "p2", replace={"bloc_r": "minecraft:paper"}, log=None)
+        assert any("n'est pas un bloc" in w for w in res["infos"][0]["warnings"])
+        res = export_assets([b], tmp / "p3", replace={"bloc_r": "stone"}, log=None)
+        assert not any("--replace" in w for w in res["infos"][0]["warnings"])
+        res = export_assets([b], tmp / "p4", replace={"bloc_r": "minecraft:stonee"}, mc="1.21.1", log=None)
+        assert not any("--replace" in w for w in res["infos"][0]["warnings"])   # pas de cache 1.21.1 : pas de contrôle

@@ -286,14 +286,18 @@ def _verification_errors(entries) -> list:
 
 
 def cmd_export(args, out) -> int:
-    from .export import NAMESPACE_RE, export_assets
+    from .export import NAMESPACE_RE, ExportError, check_replacements, export_assets
     if not NAMESPACE_RE.fullmatch(args.ns):
         raise CliError(f"--ns {args.ns!r} invalide : minuscules, chiffres, _ . - (Minecraft refuse le reste)",
                        type="usage")
     pack = Path(args.pack)
     _check_outputs(args.files, pack, pack.parent / f"{pack.name}_datapack")
     pairs = _load_many(args.files)
-    res = export_assets([a for _, a in pairs], args.pack, args.ns, args.zip, _replacements(args.replace), mc=args.mc,
+    try:                                       # argument invalide : code 2, avant d'écrire quoi que ce soit
+        repl = check_replacements(_replacements(args.replace), [a.name for _, a in pairs])
+    except ExportError as e:
+        raise CliError(str(e)) from e
+    res = export_assets([a for _, a in pairs], args.pack, args.ns, args.zip, repl, mc=args.mc,
                         textures=args.textures)
     out.update({"pack": res["pack"], "zip": res["zip"], "datapack": res["datapack"],
                 "datapack_zip": res["datapack_zip"], "namespace": args.ns, "mc": res["mc"],
