@@ -1,0 +1,61 @@
+# Galerie des exemples (#29) : construite à chaque poussée sur main, publiée sur GitHub Pages.
+# Activation (une fois) : Settings → Pages → Source : « GitHub Actions ». Tant que Pages n'est pas activé,
+# la galerie est construite et gardée en artefact, et le job de publication est sauté (main reste vert).
+name: Galerie
+
+on:
+  push:
+    branches: [main]
+    paths: ["examples/**", "pixvox/**", "scripts/gallery.py", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: construction
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.pages.outputs.enabled }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - run: python -m pip install -e .
+      - name: Galerie (planches, GIF, vues, vérification des deux cibles)
+        run: python scripts/gallery.py --out site
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+      - name: GitHub Pages est-il activé (source « GitHub Actions ») ?
+        id: pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          t=$(gh api "repos/${{ github.repository }}/pages" --jq .build_type 2>/dev/null || echo none)
+          if [ "$t" = "workflow" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Galerie non publiée::GitHub Pages n'est pas activé avec la source « GitHub Actions » (Settings → Pages). La galerie est construite et disponible en artefact."
+          fi
+
+  deploy:
+    name: publication
+    needs: build
+    if: needs.build.outputs.enabled == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

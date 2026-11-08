@@ -9,6 +9,10 @@ Conçu pour être utilisé par un agent (Claude, Codex…), un humain ou un autr
 ![Python](https://img.shields.io/badge/python-3.10%20→%203.14-blue)
 ![Minecraft](https://img.shields.io/badge/Minecraft-1.21.1%20·%201.21.4%20→%2026.3-62a03e)
 [![Licence MIT](https://img.shields.io/badge/licence-MIT-informational)](LICENSE)
+[![Galerie](https://img.shields.io/badge/galerie-exemples%20en%20ligne-e8b25c)](https://nicolas-goyon.github.io/PixVox/)
+
+**[Voir la galerie des exemples](https://nicolas-goyon.github.io/PixVox/)** : chaque asset de `examples/` tel
+que le jeu l'affiche, avec sa planche de revue, son animation et le résultat de la vérification de l'export.
 
 > **In English:** pixvox is a code-driven pixel/voxel art workshop for Minecraft Java. Describe assets
 > in Python, render them like the game does, get an analysis, export a resource pack verified by
