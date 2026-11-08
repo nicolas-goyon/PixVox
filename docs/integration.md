@@ -150,6 +150,14 @@ Code ; pour Claude Desktop, donner des chemins absolus (ou `cwd` si le client le
 - **Cursor** : même bloc `mcpServers` dans `.cursor/mcp.json` (projet) ou `~/.cursor/mcp.json`.
 - **Autre client** : commande `pixvox`, argument `mcp`, transport stdio.
 
+## Galerie en ligne (GitHub Pages)
+
+Le workflow `.github/workflows/pages.yml` construit la galerie des exemples à chaque poussée sur `main`
+(`python scripts/gallery.py --out site`) et la publie sur https://nicolas-goyon.github.io/PixVox/.
+Activation, une seule fois : *Settings → Pages → Build and deployment → Source : GitHub Actions*. Avant
+cela, le job de publication est sauté (la galerie reste téléchargeable en artefact du workflow). Pour la
+relire avant publication : `python scripts/gallery.py --out site/`, puis ouvrir `site/index.html`.
+
 ## Agents
 
 - **Claude (claude.ai)** : téléverser `pixvox_skill.zip` (fichier de chaque release) dans

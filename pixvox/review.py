@@ -650,6 +650,24 @@ def _views_for(asset):
     return views
 
 
+def _gif_durations(asset, ticks: list) -> list:
+    """Durée (ms) de chaque image d'un GIF montré aux ticks donnés, sur la boucle commune des animations."""
+    from math import gcd
+    full = 1
+    for tm, k in asset.anims:
+        if k > 1:
+            full = full * tm.period(k) // gcd(full, tm.period(k))
+    return [((ticks[i + 1] if i + 1 < len(ticks) else full) - ticks[i]) * 50 for i in range(len(ticks))]
+
+
+def anim_gif(asset, path, size: int = 360, max_frames: int = 48) -> Path:
+    """GIF d'une seule vue (inventaire), à la vitesse du jeu : vignette d'un asset animé (galerie)."""
+    from .anim import save_gif
+    frames, _ = anim_frames(asset, size, max_frames)
+    save_gif([imgs[0] for _, imgs in frames], _gif_durations(asset, [t for t, _ in frames]), path, BG[:3])
+    return Path(path)
+
+
 def anim_frames(asset, size: int = 220, max_frames: int = 48):
     """Rendus de l'animation : liste de (tick, [image par vue]) + noms des vues."""
     views = _views_for(asset)
@@ -706,21 +724,13 @@ def anim_sheet(asset, out_dir="out", size: int = 150, gif_size: int = 220, max_f
     png = out / f"{asset.name}.anim.png"
     cv.convert("RGB").save(png)
     gframes, _ = anim_frames(asset, gif_size, 48)
-    ticks = [t for t, _ in gframes]
-    period = max((tm.period(k) for tm, k in asset.anims if k > 1), default=20)
-    from math import gcd
-    full = 1
-    for tm, k in asset.anims:
-        if k > 1:
-            full = full * tm.period(k) // gcd(full, tm.period(k))
-    durs = [((ticks[i + 1] if i + 1 < len(ticks) else full) - ticks[i]) * 50 for i in range(len(ticks))]
+    durs = _gif_durations(asset, [t for t, _ in gframes])
     strips = []
     for _, imgs in gframes:
         strips.append(np.concatenate([np.concatenate([im, np.zeros((im.shape[0], 4, 4), np.uint8)], axis=1)
                                       for im in imgs], axis=1))
     gif = out / f"{asset.name}.anim.gif"
     save_gif(strips, durs, gif, BG[:3])
-    del period
     return png, gif
 
 def asset_quads(asset, tick: float = 0, biome: str | None = None) -> list:

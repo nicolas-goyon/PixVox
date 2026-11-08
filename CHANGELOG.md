@@ -14,6 +14,12 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; ve
   en code 2. Le plugin Claude Code déclare le serveur (`claude-plugin/.mcp.json`) ; configuration Claude
   Desktop, Claude Code et Cursor dans `docs/integration.md`. Tests : chaque outil par un client MCP en
   mémoire, et un vrai serveur stdio en sous-processus (protocole jamais pollué par le journal).
+- Galerie en ligne des exemples (#29) : `scripts/gallery.py --out site/` construit une page statique (vignette ou
+  GIF d'une vue, vue « en jeu », planche de revue, lien vers la source, commandes pour reproduire, vérification
+  de l'export pour 1.21.4+ et 1.21.1, `results.json`) ; code 1 si un export n'est pas vérifié. Le workflow
+  « Galerie » la construit à chaque poussée sur `main` et la publie sur GitHub Pages
+  (https://nicolas-goyon.github.io/PixVox/) ; tant que Pages n'est pas activé (source « GitHub Actions », une
+  fois), il la garde en artefact et saute la publication. `pixvox.review.anim_gif` : GIF d'une seule vue.
 
 ## [0.4.0]
 

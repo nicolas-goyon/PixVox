@@ -22,3 +22,6 @@ out/
 *.swp
 .DS_Store
 Thumbs.db
+
+# galerie construite en local (python scripts/gallery.py --out site/)
+site/

@@ -78,7 +78,9 @@ pixvox export examples/ma_lanterne.py --json         # "ok": true attendu
 ```
 
 Les assets du dépôt vivent dans `examples/` (un fichier par asset ou par famille, docstring qui
-explique la technique). Ouvrir une PR : le workflow « Aperçu des assets » rend les planches, vérifie
+explique la technique ; sa première ligne et ses paragraphes apparaissent dans la galerie en ligne,
+construite par `python scripts/gallery.py --out site/` et publiée par le workflow « Galerie » à chaque
+poussée sur `main`). Ouvrir une PR : le workflow « Aperçu des assets » rend les planches, vérifie
 l'export et publie un commentaire (mis à jour à chaque poussée) avec le résumé et les liens des
 artefacts ; le job `exemples` de la CI ré-exporte toute la galerie.
 
