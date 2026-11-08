@@ -540,3 +540,43 @@ def test_exported_png_are_byte_identical_everywhere():
         got = {p.relative_to(tmp / "pack").as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
                for p in sorted((tmp / "pack").rglob("*.png"))}
     assert got == expected, {k: v for k, v in got.items() if expected.get(k) != v}
+
+
+def test_replace_is_checked_before_writing_anything():
+    """#56 : --replace vers un nom d'asset inconnu, un identifiant invalide, un autre espace de noms que
+    minecraft, ou deux assets vers le même bloc : refusé (ExportError ; code 2 en ligne de commande), rien
+    n'est écrit. Un identifiant sans espace de noms vaut minecraft:."""
+    from pixvox.cli import run
+    from pixvox.export import ExportError, check_replacements
+    names = ["glow_ore", "other"]
+    for bad, text in (({"inconnu": "minecraft:stone"}, "aucun asset nommé 'inconnu'"),
+                      ({"glow_ore": "pas un id"}, "identifiant invalide"),
+                      ({"glow_ore": "minecraft:Stone"}, "identifiant invalide"),
+                      ({"glow_ore": "autremod:pierre"}, "autre espace de noms"),
+                      ({"glow_ore": "stone", "other": "minecraft:stone"}, "visent tous deux minecraft:stone")):
+        try:
+            check_replacements(bad, names)
+        except ExportError as e:
+            assert text in str(e), str(e)
+        else:
+            raise AssertionError(f"refus attendu : {bad}")
+    assert check_replacements({"glow_ore": "stone", "other": "minecraft:dirt"}, names) == {
+        "glow_ore": "minecraft:stone", "other": "minecraft:dirt"}
+    with tmpdir() as tmp:
+        try:
+            export_pack([Block("glow_ore", marked_volume())], tmp / "p", replace={"x": "minecraft:stone"})
+        except ExportError as e:
+            assert "aucun asset nommé 'x'" in str(e)
+        else:
+            raise AssertionError("refus attendu")
+        assert not (tmp / "p").exists()                                       # rien n'est écrit
+        (tmp / "a.py").write_text("from pixvox import Block, Volume\n"
+                                  "def build():\n    return Block('bloc_r', Volume(16, fill='#808080'))\n",
+                                  encoding="utf-8")
+        for r, text in (("inconnu=minecraft:stone", "aucun asset"), ("bloc_r=pas un id", "identifiant invalide"),
+                        ("bloc_r=autremod:pierre", "autre espace de noms")):
+            code, out = run(["export", str(tmp / "a.py"), "--pack", str(tmp / "q"), "--replace", r, "--json"])
+            assert code == 2 and out["errors"][0]["type"] == "input" and text in out["errors"][0]["message"], out
+            assert not (tmp / "q").exists()
+        code, out = run(["export", str(tmp / "a.py"), "--pack", str(tmp / "q"), "--replace", "bloc_r=stone", "--json"])
+        assert code == 0 and (tmp / "q" / "assets" / "minecraft" / "blockstates" / "stone.json").exists(), out

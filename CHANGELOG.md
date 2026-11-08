@@ -5,6 +5,16 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ; ve
 
 ## [Non publié]
 
+### Corrigé
+
+- `export --replace` (et `export_assets(replace=…)`) contrôle ses arguments avant d'écrire quoi que ce soit (#56) :
+  nom d'asset inconnu, identifiant invalide (`pas un id`), autre espace de noms que `minecraft` (réécrit en
+  silence jusqu'ici) et deux assets visant le même bloc (le second écrasait le premier) sont refusés en code 2
+  (`ExportError` en Python) ; jusqu'ici ils sortaient en code 0 sans effet. Avec le cache vanilla, un bloc ou un
+  item inconnu du jeu (faute de frappe, identifiant d'item pour un bloc) donne une alerte dans `warnings` :
+  `pixvox vanilla` garde désormais la liste des blocs et des items du jar (`vanilla.known_ids`), et complète
+  un cache plus ancien sans `--force`.
+
 ## [0.5.0]
 
 ### Ajouté

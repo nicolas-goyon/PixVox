@@ -329,7 +329,9 @@ perlin(shape, cells=4, seed=0, octaves=1)   # shape 2D, 3D… ou 4D (x, y, z, te
   1.20 ; les commandes générées compensent avec `Rotation:[180f,0f]` — la garder.
 - `pack.mcmeta` : min 46 (1.21.4) → max 97 (26.3).
 - Un `Model` doit tenir dans [-16, 32] ; au-delà, `MultiBlock`. Une partie > 150 éléments est lourde.
-- `--replace` : seulement des blocs vanilla sans propriétés. Pour tester un modèle lumineux sans mod :
+- `--replace` : seulement des blocs vanilla sans propriétés, un asset par bloc ; nom d'asset inconnu ou
+  identifiant invalide → code 2. Avec `pixvox vanilla` en cache, un bloc inconnu du jeu (faute de frappe)
+  donne une alerte : la lire. Pour tester un modèle lumineux sans mod :
   `--replace nom=minecraft:torch` (sans propriétés, lumière 14, rendu cutout) ; un vrai bloc = un mod.
 
 ## Repères 1.21.1 (`--mc 1.21.1`, vérifiés dans le jar 1.21.1 et les sources de NeoForge 21.1)

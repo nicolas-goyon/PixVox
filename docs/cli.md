@@ -44,7 +44,7 @@ Le contrat change de numéro (`schema`) quand ses champs changent : `pixvox.resu
 |---|---|---|
 | `0` | réussi | tout est exporté et vérifié |
 | `1` | **vérification échouée** : le travail est fait mais n'est pas bon | écart de rendu après export, asset refusé par les limites du jeu, compilation ou test JUnit du mod en échec, `--fail-on` atteint, textures manquantes (`render-model`) |
-| `2` | **utilisation ou environnement** : rien n'a pu être évalué | fichier absent, `build()` qui lève une exception (ou appelle `sys.exit`), argument invalide (`--ns` hors `[a-z0-9_.-]`, taille ≤ 0…), nom introuvable avec `--only`, dossier de sortie refusé, `pixvox vanilla` sans réseau ni cache, JDK de la cible absent pour `--build` (25, ou 21 avec `--mc 1.21.1`), `--mc 1.21.1` sans `--loader neoforge` |
+| `2` | **utilisation ou environnement** : rien n'a pu être évalué | fichier absent, `build()` qui lève une exception (ou appelle `sys.exit`), argument invalide (`--ns` hors `[a-z0-9_.-]`, taille ≤ 0…), nom introuvable avec `--only`, `--replace` invalide (nom d'asset inconnu, identifiant hors `[a-z0-9_.-]`, autre espace de noms que `minecraft`, deux assets vers le même bloc), dossier de sortie refusé, `pixvox vanilla` sans réseau ni cache, JDK de la cible absent pour `--build` (25, ou 21 avec `--mc 1.21.1`), `--mc 1.21.1` sans `--loader neoforge` |
 | `3` | erreur interne de pixvox (bogue : la trace est sur la sortie d'erreur) | — |
 
 ## Mode `--json`
